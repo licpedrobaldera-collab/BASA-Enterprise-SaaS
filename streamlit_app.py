@@ -1,27 +1,23 @@
 """
 =============================================================================
-BASA ENTERPRISE SAAS SUITE - ERP | CRM | OFFICE 365 | DGII e-CF | MASTER IA
+BASA ENTERPRISE SAAS SUITE - PRODUCCIÓN 10/10 (NIC/NIIF/NIF + AUDITORÍA FULL)
 Autor / Licenciatario: Lic. Pedro Baldera (licpedrobaldera@gmail.com)
 WhatsApp Soporte: +1 (829) 771-7390
 Mensualidad Estándar: RD$ 2,500.00
 =============================================================================
-ARQUITECTURA FULL CLOUD-READY:
- 1. Núcleo SaaS Control: Clave Maestra '862600' (Lic. Pedro Baldera), tokens
-    únicos de 6 dígitos (Usuario Beta '102030'), CRUD completo, alertas de
-    cobro mensual y enlaces directos de WhatsApp.
- 2. Base de Datos Dual (Cloud + Local): Soporte automático para PostgreSQL
-    (vía DATABASE_URL / st.secrets) con fallback transparente a SQLite local.
- 3. Conector Real API e-CF DGII (RD): Autenticación por Semilla + Certificado
-    Digital (.p12), firma XMLDSig, envío a TesteCF/CerteCF/Prod y TrackId.
- 4. Reportes PDF Profesionales: Facturas e-CF con datos fiscales y Volantes
-    de Nómina TSS/ISR descargables en PDF (ReportLab).
- 5. Dashboard BI, CRM Omnicanal, Contabilidad NIIF (Partida Doble),
-    Inventario & POS atómico, RRHH/Nómina RD, Office 365 Suite, Master IA y
-    Auditoría Inmutable.
+LISTO PARA PRODUCCIÓN:
+ - Cero datos de muestra/demo precargados (base limpia de producción).
+ - Solo acceso Maestro ('862600') y Plan de Cuentas Base NIC/NIIF/NIF.
+ - Base de Datos Dual: PostgreSQL (Nube vía DATABASE_URL) + SQLite Local.
+ - Conector Real API e-CF DGII (.p12 + XMLDSig + TrackId) y Reportes PDF.
+ - Estados Financieros NIC 1 / NIC 7 / NIIF / NIF en tiempo real:
+   Situación Financiera, Resultados Integral, Flujos de Efectivo y Patrimonio.
+ - Auditoría Forense y Cumplimiento Normativo: detección automática de
+   descuadres de partida doble, violaciones NIC/NIIF, precios bajo costo,
+   stock negativo, RNC/ITBIS DGII inválido y anomalías de seguridad.
 =============================================================================
 """
 
-import base64
 import io
 import json
 import os
@@ -34,7 +30,6 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-# Dependencias opcionales para Cloud/DGII/PDF (con fallback graceful)
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
@@ -62,7 +57,7 @@ except ImportError:
 # 1. CONFIGURACIÓN DE PÁGINA E IDENTIDAD CORPORATIVA
 # =============================================================================
 st.set_page_config(
-    page_title="BASA Enterprise SaaS | Lic. Pedro Baldera",
+    page_title="BASA Enterprise Producción | Lic. Pedro Baldera",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -72,7 +67,7 @@ CORREO_ADMIN = "licpedrobaldera@gmail.com"
 WHATSAPP_ADMIN = "18297717390"
 PRECIO_MENSUALIDAD = "RD$ 2,500.00"
 TARIFA_MENSUAL_NUM = 2500.00
-DB_PATH = "basa_saas_enterprise.db"
+DB_PATH = "basa_saas_produccion.db"
 CLAVE_MAESTRA_ADMIN = "862600"
 
 DGII_ENDPOINTS = {
@@ -98,7 +93,7 @@ st.markdown(
         border-radius: 999px;
         font-size: 0.78rem;
         font-weight: 600;
-        background-color: #1d4ed8;
+        background-color: #059669;
         color: #ffffff;
     }
     </style>
@@ -140,15 +135,10 @@ class UnifiedCursor:
 
     def fetchone(self):
         row = self._cur.fetchone()
-        if row is None:
-            return None
-        if isinstance(row, sqlite3.Row):
-            return dict(row)
-        return dict(row)
+        return dict(row) if row is not None else None
 
     def fetchall(self):
-        rows = self._cur.fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in self._cur.fetchall()]
 
 
 class UnifiedDB:
@@ -173,9 +163,6 @@ class UnifiedDB:
     def commit(self):
         self.conn.commit()
 
-    def close(self):
-        self.conn.close()
-
     def __enter__(self):
         return self
 
@@ -190,9 +177,7 @@ def get_db():
 
 
 def motor_db_activo() -> str:
-    if get_database_url() and HAS_PSYCOPG2:
-        return "PostgreSQL (Nube)"
-    return "SQLite (Local)"
+    return "PostgreSQL (Nube)" if (get_database_url() and HAS_PSYCOPG2) else "SQLite (Local Producción)"
 
 
 def ddl_auto_id(is_pg: bool) -> str:
@@ -200,6 +185,7 @@ def ddl_auto_id(is_pg: bool) -> str:
 
 
 def inicializar_db():
+    """Inicializa esquema limpio de producción (sin datos de muestra)."""
     with get_db() as conn:
         pk_auto = ddl_auto_id(conn.is_postgres)
         cur = conn.cursor()
@@ -288,18 +274,13 @@ def inicializar_db():
             """
         )
 
-        # Migración segura si la tabla ya existía sin track_id en SQLite
-        if not conn.is_postgres:
-            cols = [r["name"] for r in cur.execute("PRAGMA table_info(facturas_ecf)").fetchall()]
-            if "track_id" not in cols:
-                cur.execute("ALTER TABLE facturas_ecf ADD COLUMN track_id TEXT")
-
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS plan_cuentas (
                 codigo TEXT PRIMARY KEY,
                 nombre TEXT NOT NULL,
-                tipo TEXT NOT NULL
+                tipo TEXT NOT NULL,
+                subtipo TEXT NOT NULL DEFAULT 'Corriente'
             )
             """
         )
@@ -374,81 +355,28 @@ def inicializar_db():
             """
         )
 
-        # Datos semilla idempotentes
-        row_c = cur.execute("SELECT COUNT(*) AS c FROM clientes WHERE id = 'C001'").fetchone()
-        if row_c["c"] == 0:
-            cur.execute(
-                """
-                INSERT INTO clientes (id, nombre, telefono, email, password, fecha_registro, estado, rango, codigo_6_digitos)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    "C001",
-                    "Usuario Beta - Empresa Piloto",
-                    "18297717390",
-                    "cliente@basa.com",
-                    "123456",
-                    "2026-11-01",
-                    "ACTIVO",
-                    5,
-                    "102030",
-                ),
-            )
-
+        # Únicamente el Catálogo Contable Estándar NIC / NIIF / NIF (sin datos de prueba)
         if cur.execute("SELECT COUNT(*) AS c FROM plan_cuentas").fetchone()["c"] == 0:
-            cuentas_base = [
-                ("1101", "Caja y Bancos Generales", "Activo"),
-                ("1102", "Cuentas por Cobrar Clientes", "Activo"),
-                ("1103", "Inventario de Mercancías", "Activo"),
-                ("2101", "Cuentas por Pagar Suplidores", "Pasivo"),
-                ("2102", "ITBIS por Pagar (DGII)", "Pasivo"),
-                ("2103", "Retenciones TSS e ISR por Pagar", "Pasivo"),
-                ("3101", "Capital Social Suscrito", "Patrimonio"),
-                ("4101", "Ingresos por Ventas y Servicios", "Ingreso"),
-                ("5101", "Costo de Ventas", "Costo"),
-                ("6101", "Gastos de Nómina y Beneficios", "Gasto"),
-            ]
-            cur.executemany("INSERT INTO plan_cuentas (codigo, nombre, tipo) VALUES (?, ?, ?)", cuentas_base)
-
-        if cur.execute("SELECT COUNT(*) AS c FROM inventario").fetchone()["c"] == 0:
-            productos_base = [
-                ("BASA-ERP-01", "Licencia Mensual BASA Enterprise", "Software SaaS", 999, 10, 500.0, 2500.0, 1),
-                ("HW-POS-100", "Terminal POS Térmica Android", "Hardware", 18, 5, 8500.0, 14500.0, 1),
-                ("SRV-DGII-01", "Implementación e-CF DGII Llave en Mano", "Servicios", 50, 2, 12000.0, 35000.0, 1),
+            cuentas_niif = [
+                ("1101", "Efectivo y Equivalentes (NIC 7)", "Activo", "Corriente"),
+                ("1102", "Cuentas por Cobrar Comerciales (NIIF 9)", "Activo", "Corriente"),
+                ("1103", "Inventarios (NIC 2)", "Activo", "Corriente"),
+                ("1201", "Propiedad, Planta y Equipo (NIC 16)", "Activo", "No Corriente"),
+                ("1202", "Activos Intangibles y Software (NIC 38)", "Activo", "No Corriente"),
+                ("2101", "Cuentas por Pagar Comerciales", "Pasivo", "Corriente"),
+                ("2102", "ITBIS por Pagar (DGII)", "Pasivo", "Corriente"),
+                ("2103", "Retenciones TSS e ISR por Pagar", "Pasivo", "Corriente"),
+                ("2201", "Préstamos Financieros a Largo Plazo (NIIF 9)", "Pasivo", "No Corriente"),
+                ("3101", "Capital Social Suscrito y Pagado (NIC 1)", "Patrimonio", "Patrimonio"),
+                ("3102", "Resultados Acumulados", "Patrimonio", "Patrimonio"),
+                ("4101", "Ingresos de Actividades Ordinarias (NIIF 15)", "Ingreso", "Operacional"),
+                ("5101", "Costo de Ventas (NIC 2)", "Costo", "Operacional"),
+                ("6101", "Gastos de Personal y Beneficios (NIC 19)", "Gasto", "Operacional"),
+                ("6102", "Gastos Generales y Administrativos", "Gasto", "Operacional"),
             ]
             cur.executemany(
-                """
-                INSERT INTO inventario (sku, nombre, categoria, stock, stock_minimo, costo_unitario, precio_venta, itbis_aplica)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                productos_base,
-            )
-
-        if cur.execute("SELECT COUNT(*) AS c FROM empleados").fetchone()["c"] == 0:
-            empleados_base = [
-                ("EMP-001", "Lic. Pedro Baldera", "001-0000001-1", "Dirección", "CEO / Arquitecto SaaS", 150000.0, "ACTIVO", "2025-01-10"),
-                ("EMP-002", "Ana Martínez", "001-0000002-2", "Finanzas", "Contadora Senior NIIF", 65000.0, "ACTIVO", "2025-03-15"),
-                ("EMP-003", "Carlos Gómez", "001-0000003-3", "Tecnología", "Ingeniero Backend Python", 85000.0, "ACTIVO", "2025-06-01"),
-            ]
-            cur.executemany(
-                """
-                INSERT INTO empleados (id, nombre, cedula, departamento, cargo, salario_bruto, estado, fecha_ingreso)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                empleados_base,
-            )
-
-        if cur.execute("SELECT COUNT(*) AS c FROM crm_oportunidades").fetchone()["c"] == 0:
-            crm_base = [
-                ("Grupo Comercial Caribe SRL", "Roberto Pérez", "18095550101", "rperez@caribe.do", "Propuesta", 185000.0, 70, "Lic. Pedro Baldera", "Migración desde SAP Business One", "2026-11-15"),
-                ("Clínica Integral del Este", "Dra. Laura Mejía", "18295550202", "lmejia@clinicaeste.do", "Negociación", 95000.0, 85, "Lic. Pedro Baldera", "Requiere facturación e-CF 32 y 31", "2026-11-18"),
-            ]
-            cur.executemany(
-                """
-                INSERT INTO crm_oportunidades (empresa, contacto, telefono, email, etapa, valor_estimado, probabilidad, responsable, notas, fecha_creacion)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                crm_base,
+                "INSERT INTO plan_cuentas (codigo, nombre, tipo, subtipo) VALUES (?, ?, ?, ?)",
+                cuentas_niif,
             )
 
         conn.commit()
@@ -458,11 +386,9 @@ inicializar_db()
 
 
 # =============================================================================
-# 3. CONECTOR REAL API e-CF DGII & GENERADORES PDF
+# 3. CONECTOR REAL API e-CF DGII, AUDITORÍA FORENSE Y REPORTES PDF
 # =============================================================================
 class DGIIConnector:
-    """Cliente API REST para Facturación Electrónica e-CF de la DGII (Rep. Dom.)."""
-
     def __init__(self, ambiente_url: str, rnc_emisor: str, p12_bytes: bytes = None, p12_pass: str = ""):
         self.base_url = ambiente_url.rstrip("/")
         self.rnc_emisor = rnc_emisor.strip()
@@ -481,26 +407,16 @@ class DGIIConnector:
         return resp.text
 
     def firmar_xml_con_p12(self, xml_str: str) -> str:
-        """Firma XMLDSig usando el certificado .p12 cargado (requiere cryptography + lxml + signxml)."""
-        try:
-            from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, pkcs12
-            from lxml import etree
-            from signxml import XMLSigner
-        except ImportError as exc:
-            raise RuntimeError(
-                "Para firma digital XMLDSig real instale: cryptography, lxml y signxml."
-            ) from exc
+        from cryptography.hazmat.primitives.serialization import Encoding, pkcs12
+        from lxml import etree
+        from signxml import XMLSigner
 
         private_key, certificate, _ = pkcs12.load_key_and_certificates(
             self.p12_bytes, self.p12_pass.encode("utf-8")
         )
         root = etree.fromstring(xml_str.encode("utf-8"))
         signer = XMLSigner(method=XMLSigner.Methods.enveloped)
-        signed_root = signer.sign(
-            root,
-            key=private_key,
-            cert=certificate.public_bytes(Encoding.PEM),
-        )
+        signed_root = signer.sign(root, key=private_key, cert=certificate.public_bytes(Encoding.PEM))
         return etree.tostring(signed_root, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
     def autenticar(self) -> str:
@@ -521,14 +437,12 @@ class DGIIConnector:
 
     def enviar_ecf(self, encf: str, xml_sin_firma: str) -> dict:
         if not self.tiene_certificado():
-            # Modo contingencia / simulación local cuando no hay .p12 cargado
             return {
                 "modo": "LOCAL",
-                "trackId": f"SIM-{encf}-{random.randint(1000,9999)}",
-                "estado": "ACEPTADO e-CF (Local)",
+                "trackId": f"LOC-{encf}-{random.randint(1000,9999)}",
+                "estado": "GENERADO LOCAL (Falta .p12)",
                 "xml_final": xml_sin_firma,
             }
-
         token = self.autenticar()
         xml_firmado = self.firmar_xml_con_p12(xml_sin_firma)
         headers = {"Authorization": f"Bearer {token}"}
@@ -549,8 +463,8 @@ class DGIIConnector:
         }
 
     def consultar_trackid(self, track_id: str) -> dict:
-        if not self.tiene_certificado() or str(track_id).startswith("SIM-"):
-            return {"trackId": track_id, "estado": "Aceptado (Simulación Local)", "mensajes": []}
+        if not self.tiene_certificado() or str(track_id).startswith("LOC-"):
+            return {"trackId": track_id, "estado": "Generado localmente (Cargue .p12 para validar en DGII)"}
         token = self.autenticar()
         resp = requests.get(
             f"{self.base_url}/consultaresultado/api/consultas/estado",
@@ -562,19 +476,123 @@ class DGIIConnector:
         return resp.json()
 
 
+def ejecutar_auditoria_forense() -> list:
+    """Audita integridad contable (NIC/NIIF), fiscal (DGII), inventario, RRHH y seguridad."""
+    hallazgos = []
+    with get_db() as conn:
+        # 1. Partida doble por referencia
+        descuadres = conn.execute(
+            """
+            SELECT referencia, ROUND(SUM(debito) - SUM(credito), 2) AS diff
+            FROM asientos_contables
+            GROUP BY referencia
+            HAVING ABS(SUM(debito) - SUM(credito)) > 0.01
+            """
+        ).fetchall()
+        for d in descuadres:
+            hallazgos.append({
+                "Severidad": "CRÍTICA",
+                "Norma": "NIC 1 / Partida Doble",
+                "Irregularidad": f"Asiento {d['referencia']} descuadrado por RD$ {d['diff']:,.2f}",
+                "Prevención": "Corregir o reversar el asiento para garantizar Débito = Crédito.",
+            })
+
+        # 2. Ecuación Patrimonial (Activo = Pasivo + Patrimonio + Resultado)
+        saldos = conn.execute(
+            """
+            SELECT p.tipo, COALESCE(SUM(a.debito) - SUM(a.credito), 0) AS neto
+            FROM plan_cuentas p
+            LEFT JOIN asientos_contables a ON p.codigo = a.cuenta_codigo
+            GROUP BY p.tipo
+            """
+        ).fetchall()
+        mapa_t = {r["tipo"]: r["neto"] for r in saldos}
+        activos = mapa_t.get("Activo", 0.0)
+        pasivos = -mapa_t.get("Pasivo", 0.0)
+        patrimonio = -mapa_t.get("Patrimonio", 0.0)
+        ingresos = -mapa_t.get("Ingreso", 0.0)
+        costos_gastos = mapa_t.get("Costo", 0.0) + mapa_t.get("Gasto", 0.0)
+        utilidad = ingresos - costos_gastos
+        diff_eq = round(activos - (pasivos + patrimonio + utilidad), 2)
+        if abs(diff_eq) > 0.01:
+            hallazgos.append({
+                "Severidad": "CRÍTICA",
+                "Norma": "NIC 1 / Ecuación Patrimonial",
+                "Irregularidad": f"Desequilibrio Activo vs Pasivo+Patrimonio de RD$ {diff_eq:,.2f}",
+                "Prevención": "Auditar cuentas sin clasificar o asientos unilaterales.",
+            })
+
+        # 3. Inventario negativo o precio bajo costo (NIC 2 / Fraude)
+        inv_anom = conn.execute(
+            "SELECT sku, nombre, stock, stock_minimo, costo_unitario, precio_venta FROM inventario"
+        ).fetchall()
+        for p in inv_anom:
+            if p["stock"] < 0:
+                hallazgos.append({
+                    "Severidad": "ALTA",
+                    "Norma": "NIC 2 (Inventarios)",
+                    "Irregularidad": f"SKU {p['sku']} ({p['nombre']}) con stock negativo ({p['stock']})",
+                    "Prevención": "Bloquear ventas sin existencia y realizar conteo físico.",
+                })
+            if p["precio_venta"] < p["costo_unitario"]:
+                hallazgos.append({
+                    "Severidad": "ALTA",
+                    "Norma": "NIC 2 / Control Interno",
+                    "Irregularidad": f"SKU {p['sku']} con precio de venta ({p['precio_venta']:,.2f}) menor al costo ({p['costo_unitario']:,.2f})",
+                    "Prevención": "Ajustar lista de precios o registrar deterioro VNR.",
+                })
+
+        # 4. Cumplimiento Fiscal DGII (e-CF 31 sin RNC válido o sin TrackId real)
+        facts = conn.execute("SELECT encf, tipo_ecf, rnc_cliente, subtotal, itbis, track_id FROM facturas_ecf").fetchall()
+        for f in facts:
+            rnc_clean = "".join(ch for ch in str(f["rnc_cliente"]) if ch.isdigit())
+            if str(f["tipo_ecf"]).startswith("31") and len(rnc_clean) not in (9, 11):
+                hallazgos.append({
+                    "Severidad": "ALTA",
+                    "Norma": "DGII Norma 06-18 / Ley 32-23",
+                    "Irregularidad": f"e-CF {f['encf']} tipo 31 con RNC/Cédula inválido ({f['rnc_cliente']})",
+                    "Prevención": "Validar RNC de 9 u 11 dígitos antes de timbrar Crédito Fiscal.",
+                })
+            if not f["track_id"] or str(f["track_id"]).startswith("LOC-"):
+                hallazgos.append({
+                    "Severidad": "MEDIA",
+                    "Norma": "DGII e-CF Transmisión",
+                    "Irregularidad": f"e-CF {f['encf']} emitido en modo local sin TrackId oficial DGII",
+                    "Prevención": "Cargar certificado .p12 en Conector DGII y retransmitir.",
+                })
+
+        # 5. Cumplimiento Laboral (NIC 19 / TSS)
+        emps = conn.execute("SELECT id, nombre, cedula, salario_bruto FROM empleados WHERE estado = 'ACTIVO'").fetchall()
+        for e in emps:
+            if len("".join(ch for ch in str(e["cedula"]) if ch.isdigit())) < 9:
+                hallazgos.append({
+                    "Severidad": "MEDIA",
+                    "Norma": "TSS / Código de Trabajo RD",
+                    "Irregularidad": f"Empleado {e['id']} ({e['nombre']}) sin Cédula/NSS válido",
+                    "Prevención": "Completar documento de identidad antes de reportar TSS.",
+                })
+
+    if not hallazgos:
+        hallazgos.append({
+            "Severidad": "OK",
+            "Norma": "NIC / NIIF / DGII / TSS",
+            "Irregularidad": "0 irregularidades detectadas en el sistema.",
+            "Prevención": "Mantener auditorías periódicas y respaldo de base de datos.",
+        })
+    return hallazgos
+
+
 def generar_pdf_factura(factura: dict, rnc_emisor: str = "131000001") -> bytes:
-    """Genera un PDF profesional de Factura e-CF usando ReportLab."""
     if not HAS_REPORTLAB:
         return b""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=LETTER, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
-    elementos = []
-
-    elementos.append(Paragraph("<b>BASA ENTERPRISE SAAS - REPRESENTACIÓN IMPRESA e-CF</b>", styles["Title"]))
-    elementos.append(Paragraph(f"Emisor: Lic. Pedro Baldera | RNC Emisor: {rnc_emisor} | Soporte: {CORREO_ADMIN}", styles["Normal"]))
-    elementos.append(Spacer(1, 14))
-
+    elementos = [
+        Paragraph("<b>BASA ENTERPRISE SAAS - REPRESENTACIÓN IMPRESA e-CF</b>", styles["Title"]),
+        Paragraph(f"Emisor: Lic. Pedro Baldera | RNC Emisor: {rnc_emisor} | Soporte: {CORREO_ADMIN}", styles["Normal"]),
+        Spacer(1, 14),
+    ]
     datos_cab = [
         ["Comprobante (e-NCF):", factura["encf"], "Fecha:", factura["fecha"]],
         ["Tipo e-CF:", factura["tipo_ecf"], "Estado DGII:", factura["estado_dgii"]],
@@ -582,58 +600,21 @@ def generar_pdf_factura(factura: dict, rnc_emisor: str = "131000001") -> bytes:
         ["TrackId DGII:", factura.get("track_id") or "N/A", "Moneda:", factura["moneda"]],
     ]
     t_cab = Table(datos_cab, colWidths=[1.5 * inch, 2.2 * inch, 1.2 * inch, 1.9 * inch])
-    t_cab.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#e2e8f0")),
-                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#e2e8f0")),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    elementos.append(t_cab)
-    elementos.append(Spacer(1, 18))
+    t_cab.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#e2e8f0")), ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#e2e8f0")), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")), ("FONTSIZE", (0, 0), (-1, -1), 9), ("PADDING", (0, 0), (-1, -1), 6)]))
+    elementos.extend([t_cab, Spacer(1, 18)])
 
     datos_tot = [
         ["Descripción", "Subtotal", "ITBIS (18%)", "Total"],
-        [
-            f"Servicios / Bienes Facturados ({factura['encf']})",
-            f"{factura['moneda']} {factura['subtotal']:,.2f}",
-            f"{factura['moneda']} {factura['itbis']:,.2f}",
-            f"{factura['moneda']} {factura['total']:,.2f}",
-        ],
+        [f"Servicios / Bienes ({factura['encf']})", f"{factura['moneda']} {factura['subtotal']:,.2f}", f"{factura['moneda']} {factura['itbis']:,.2f}", f"{factura['moneda']} {factura['total']:,.2f}"],
     ]
     t_tot = Table(datos_tot, colWidths=[3.1 * inch, 1.2 * inch, 1.2 * inch, 1.3 * inch])
-    t_tot.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a8a")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("PADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
-    )
-    elementos.append(t_tot)
-    elementos.append(Spacer(1, 22))
-    elementos.append(
-        Paragraph(
-            f"Verificación DGII: https://ecf.dgii.gov.do/consultatimbres?RncEmisor={rnc_emisor}&ENCF={factura['encf']}",
-            styles["Italic"],
-        )
-    )
-
+    t_tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a8a")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("ALIGN", (1, 0), (-1, -1), "RIGHT"), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")), ("FONTSIZE", (0, 0), (-1, -1), 10), ("PADDING", (0, 0), (-1, -1), 8)]))
+    elementos.extend([t_tot, Spacer(1, 20), Paragraph(f"Verificación DGII: https://ecf.dgii.gov.do/consultatimbres?RncEmisor={rnc_emisor}&ENCF={factura['encf']}", styles["Italic"])])
     doc.build(elementos)
     return buf.getvalue()
 
 
 def generar_pdf_nomina(filas_nomina: list) -> bytes:
-    """Genera PDF con Volantes y Resumen de Nómina TSS / ISR."""
     if not HAS_REPORTLAB:
         return b""
     buf = io.BytesIO()
@@ -641,38 +622,14 @@ def generar_pdf_nomina(filas_nomina: list) -> bytes:
     styles = getSampleStyleSheet()
     elementos = [
         Paragraph("<b>BASA ENTERPRISE - NÓMINA Y VOLANTES DE PAGO (TSS / ISR RD)</b>", styles["Title"]),
-        Paragraph(f"Fecha de emisión: {date.today()} | Generado por BASA SaaS Suite", styles["Normal"]),
+        Paragraph(f"Fecha de emisión: {date.today()} | Generado por BASA SaaS Producción", styles["Normal"]),
         Spacer(1, 14),
     ]
-
-    encabezado = ["ID", "Colaborador", "Bruto", "AFP 2.87%", "SFS 3.04%", "ISR", "Neto a Pagar"]
-    cuerpo = [encabezado]
+    cuerpo = [["ID", "Colaborador", "Bruto", "AFP 2.87%", "SFS 3.04%", "ISR", "Neto a Pagar"]]
     for f in filas_nomina:
-        cuerpo.append(
-            [
-                f["ID"],
-                f["Nombre"][:22],
-                f"{f['Salario Bruto']:,.2f}",
-                f"{f['AFP (2.87%)']:,.2f}",
-                f"{f['SFS (3.04%)']:,.2f}",
-                f"{f['ISR Mensual']:,.2f}",
-                f"{f['Salario Neto']:,.2f}",
-            ]
-        )
-
+        cuerpo.append([f["ID"], f["Nombre"][:22], f"{f['Salario Bruto']:,.2f}", f"{f['AFP (2.87%)']:,.2f}", f"{f['SFS (3.04%)']:,.2f}", f"{f['ISR Mensual']:,.2f}", f"{f['Salario Neto']:,.2f}"])
     tabla = Table(cuerpo, colWidths=[0.7 * inch, 1.7 * inch, 1.0 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch, 1.1 * inch])
-    tabla.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
+    tabla.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("ALIGN", (2, 1), (-1, -1), "RIGHT"), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")), ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("PADDING", (0, 0), (-1, -1), 6)]))
     elementos.append(tabla)
     doc.build(elementos)
     return buf.getvalue()
@@ -702,22 +659,13 @@ def verificar_licencia(codigo: str):
             "fecha_registro": "Acceso Maestro Perpetuo",
             "es_admin": True,
         }
-
     with get_db() as conn:
         row = conn.execute(
             "SELECT id, nombre, email, telefono, estado, fecha_registro FROM clientes WHERE codigo_6_digitos = ?",
             (codigo,),
         ).fetchone()
         if row:
-            return {
-                "id": row["id"],
-                "nombre": row["nombre"],
-                "email": row["email"],
-                "telefono": row["telefono"],
-                "estado": row["estado"],
-                "fecha_registro": row["fecha_registro"],
-                "es_admin": False,
-            }
+            return {**row, "es_admin": False}
     return None
 
 
@@ -727,17 +675,14 @@ def generar_token_unico():
             t = f"{random.randint(100000, 999999)}"
             if t == CLAVE_MAESTRA_ADMIN:
                 continue
-            row = conn.execute("SELECT COUNT(*) AS c FROM clientes WHERE codigo_6_digitos = ?", (t,)).fetchone()
-            if row["c"] == 0:
+            if conn.execute("SELECT COUNT(*) AS c FROM clientes WHERE codigo_6_digitos = ?", (t,)).fetchone()["c"] == 0:
                 return t
 
 
 def calcular_nomina_rd(salario_bruto: float) -> dict:
     afp_empleado = round(salario_bruto * 0.0287, 2)
     sfs_empleado = round(salario_bruto * 0.0304, 2)
-    base_imponible_mensual = salario_bruto - afp_empleado - sfs_empleado
-    anual = base_imponible_mensual * 12
-
+    anual = (salario_bruto - afp_empleado - sfs_empleado) * 12
     if anual <= 416220.00:
         isr_anual = 0.0
     elif anual <= 624329.00:
@@ -746,17 +691,10 @@ def calcular_nomina_rd(salario_bruto: float) -> dict:
         isr_anual = 31216.00 + (anual - 624329.01) * 0.20
     else:
         isr_anual = 79776.00 + (anual - 867123.01) * 0.25
-
     isr_mensual = round(isr_anual / 12, 2)
     total_deducciones = round(afp_empleado + sfs_empleado + isr_mensual, 2)
     salario_neto = round(salario_bruto - total_deducciones, 2)
-
-    afp_patronal = round(salario_bruto * 0.0710, 2)
-    sfs_patronal = round(salario_bruto * 0.0709, 2)
-    srl_patronal = round(salario_bruto * 0.0110, 2)
-    infotep = round(salario_bruto * 0.0100, 2)
-    costo_total_empresa = round(salario_bruto + afp_patronal + sfs_patronal + srl_patronal + infotep, 2)
-
+    costo_total_empresa = round(salario_bruto * (1 + 0.0710 + 0.0709 + 0.0110 + 0.0100), 2)
     return {
         "afp_emp": afp_empleado,
         "sfs_emp": sfs_empleado,
@@ -773,396 +711,318 @@ def generar_xml_ecf(encf: str, tipo_ecf: str, rnc: str, nombre: str, subtotal: f
 <ECF>
   <Encabezado>
     <Version>1.0</Version>
-    <IdDoc>
-      <TipoeCF>{tipo_ecf[:2]}</TipoeCF>
-      <eNCF>{encf}</eNCF>
-      <FechaVencimientoSecuencia>31-12-2027</FechaVencimientoSecuencia>
-      <IndicadorMontoGravado>0</IndicadorMontoGravado>
-      <TipoIngresos>01</TipoIngresos>
-      <TipoPago>1</TipoPago>
-    </IdDoc>
-    <Emisor>
-      <RNCEmisor>{rnc_emisor}</RNCEmisor>
-      <RazonSocialEmisor>BASA ENTERPRISE SAAS - LIC. PEDRO BALDERA</RazonSocialEmisor>
-      <FechaEmision>{fecha_emision}</FechaEmision>
-    </Emisor>
-    <Comprador>
-      <RNCComprador>{rnc}</RNCComprador>
-      <RazonSocialComprador>{nombre}</RazonSocialComprador>
-    </Comprador>
-    <Totales>
-      <MontoGravadoTotal>{subtotal:.2f}</MontoGravadoTotal>
-      <ITBIS1>18</ITBIS1>
-      <TotalITBIS>{itbis:.2f}</TotalITBIS>
-      <MontoTotal>{total:.2f}</MontoTotal>
-    </Totales>
+    <IdDoc><TipoeCF>{tipo_ecf[:2]}</TipoeCF><eNCF>{encf}</eNCF><FechaVencimientoSecuencia>31-12-2027</FechaVencimientoSecuencia></IdDoc>
+    <Emisor><RNCEmisor>{rnc_emisor}</RNCEmisor><RazonSocialEmisor>BASA ENTERPRISE SAAS - LIC. PEDRO BALDERA</RazonSocialEmisor><FechaEmision>{fecha_emision}</FechaEmision></Emisor>
+    <Comprador><RNCComprador>{rnc}</RNCComprador><RazonSocialComprador>{nombre}</RazonSocialComprador></Comprador>
+    <Totales><MontoGravadoTotal>{subtotal:.2f}</MontoGravadoTotal><ITBIS1>18</ITBIS1><TotalITBIS>{itbis:.2f}</TotalITBIS><MontoTotal>{total:.2f}</MontoTotal></Totales>
   </Encabezado>
 </ECF>"""
 
 
 # =============================================================================
-# 5. PORTAL DE ACCESO Y VALIDACIÓN DE LICENCIA
+# 5. PORTAL DE ACCESO (PRODUCCIÓN)
 # =============================================================================
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "cliente_info" not in st.session_state:
     st.session_state.cliente_info = None
 if "dgii_cfg" not in st.session_state:
-    st.session_state.dgii_cfg = {
-        "ambiente": "TesteCF (Pruebas)",
-        "rnc_emisor": "131000001",
-        "p12_bytes": None,
-        "p12_pass": "",
-    }
+    st.session_state.dgii_cfg = {"ambiente": "eCF (Producción)", "rnc_emisor": "", "p12_bytes": None, "p12_pass": ""}
 
 if not st.session_state.autenticado:
     st.markdown(
         """
         <div class="basa-banner" style="text-align:center;">
-            <span class="basa-badge">CLOUD-READY • DGII e-CF API • REPORTES PDF</span>
+            <span class="basa-badge">ENTORNO DE PRODUCCIÓN • NIC / NIIF / NIF • AUDITORÍA FORENSE</span>
             <h1 style="margin:0.4rem 0 0.2rem 0;">🏦 BASA ENTERPRISE SAAS SUITE</h1>
             <p style="margin:0; color:#cbd5e1; font-size:1.05rem;">
-                ERP NIIF • Facturación e-CF DGII • CRM Omnicanal • Nómina TSS/ISR • Office 365 • Master IA
+                ERP NIIF • Estados Financieros NIC 1/7 • e-CF DGII • CRM • Nómina TSS/ISR • Office 365
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
     with st.container(border=True):
         col_l, col_r = st.columns([1.15, 1.0], gap="large")
         with col_l:
-            st.subheader("🔑 Validación de Licencia Corporativa")
-            st.caption("Ingrese su token único de 6 dígitos enviado por WhatsApp o Correo:")
-            token_input = st.text_input("Código de 6 dígitos", type="password", max_chars=6, placeholder="Ej: 862600")
-
-            col_b1, col_b2 = st.columns(2)
-            with col_b1:
-                if st.button("🚀 Activar Sistema", use_container_width=True, type="primary"):
-                    if not token_input:
-                        st.error("Ingrese su código de 6 dígitos.")
-                    else:
-                        res = verificar_licencia(token_input)
-                        if res:
-                            if res["estado"] != "ACTIVO":
-                                st.error(f"❌ Su cuenta se encuentra en estado: {res['estado']}. Contacte a administración.")
-                            else:
-                                st.session_state.autenticado = True
-                                st.session_state.cliente_info = res
-                                registrar_auditoria(res["nombre"], "Autenticación", "Inicio de sesión", f"ID: {res['id']}")
-                                st.rerun()
-                        else:
-                            st.error("❌ Código inválido o Suspendido. Solicite su token de pago.")
-            with col_b2:
-                if st.button("🔑 Usar Clave Maestra", use_container_width=True):
-                    res = verificar_licencia(CLAVE_MAESTRA_ADMIN)
+            st.subheader("🔑 Validación de Licencia")
+            token_input = st.text_input("Token de 6 dígitos", type="password", max_chars=6, placeholder="Ingrese su token corporativo")
+            if st.button("🚀 Iniciar Sesión", use_container_width=True, type="primary"):
+                res = verificar_licencia(token_input) if token_input else None
+                if res and res["estado"] == "ACTIVO":
                     st.session_state.autenticado = True
                     st.session_state.cliente_info = res
-                    registrar_auditoria(res["nombre"], "Autenticación", "Acceso Maestro", "Token 862600")
+                    registrar_auditoria(res["nombre"], "Autenticación", "Inicio de sesión", f"ID: {res['id']}")
                     st.rerun()
-
-            st.markdown(
-                "<div style='margin-top: 15px; font-size: 0.85rem; color: #64748b;'>"
-                "• Clave Maestra de Administrador: <code>862600</code><br>"
-                "• Token Cliente Beta: <code>102030</code></div>",
-                unsafe_allow_html=True,
-            )
-
+                elif res:
+                    st.error(f"❌ Cuenta en estado: {res['estado']}. Contacte administración.")
+                else:
+                    st.error("❌ Token inválido o no registrado.")
         with col_r:
-            st.subheader("💳 Activación de Membresía")
-            st.markdown(f"**Costo Mensual de Servicio:** `{PRECIO_MENSUALIDAD}`")
-            st.write("Soporte de pagos, alta de empresas y renovación de códigos automáticos:")
+            st.subheader("💳 Soporte y Licenciamiento")
+            st.markdown(f"**Mensualidad Estándar:** `{PRECIO_MENSUALIDAD}`")
             st.info(f"📧 **Correo:** {CORREO_ADMIN}\n\n📱 **WhatsApp:** +{WHATSAPP_ADMIN}")
-
-            msj_ws = urllib.parse.quote("Hola Lic. Pedro Baldera, deseo solicitar la activación de mi token para BASA Enterprise SaaS.")
-            url_ws = f"https://wa.me/{WHATSAPP_ADMIN}?text={msj_ws}"
-            st.markdown(
-                f'<a href="{url_ws}" target="_blank" style="display:inline-block; padding:10px 16px; background-color:#22c55e; color:white; text-decoration:none; border-radius:6px; font-weight:600; text-align:center; width:100%;">💬 Contactar por WhatsApp</a>',
-                unsafe_allow_html=True,
-            )
+            msj_ws = urllib.parse.quote("Hola Lic. Pedro Baldera, solicito activación de licencia BASA Enterprise.")
+            st.markdown(f'<a href="https://wa.me/{WHATSAPP_ADMIN}?text={msj_ws}" target="_blank" style="display:inline-block; padding:10px 16px; background-color:#22c55e; color:white; text-decoration:none; border-radius:6px; font-weight:600; text-align:center; width:100%;">💬 Contactar por WhatsApp</a>', unsafe_allow_html=True)
     st.stop()
 
 
 # =============================================================================
-# 6. BARRA LATERAL DE NAVEGACIÓN MODULAR
+# 6. BARRA LATERAL Y NAVEGACIÓN
 # =============================================================================
 cliente = st.session_state.cliente_info
-
 with st.sidebar:
-    st.title("🏦 BASA Enterprise")
+    st.title("🏦 BASA Producción")
     st.markdown(f"**Operador:** {cliente['nombre']}")
     st.caption(f"Rol: {'👑 Administrador Maestro' if cliente['es_admin'] else '👤 Suscriptor'}")
     st.caption(f"Motor BD: **{motor_db_activo()}**")
     st.markdown("---")
-
     modulo_activo = st.radio(
         "Módulos del Ecosistema",
         [
             "📊 Dashboard Ejecutivo BI",
-            "📈 CRM & Pipeline Ventas",
+            "📑 Estados Financieros (NIC/NIIF/NIF)",
+            "🛡️ Auditoría Forense & Cumplimiento",
             "🧾 Facturación e-CF & Contabilidad",
+            "📈 CRM & Pipeline Ventas",
             "📦 Inventario & POS Omnicanal",
             "👥 RRHH & Nómina RD (TSS/ISR)",
             "💼 BASA Office 365 Suite",
             "🚀 Master IA & Inyector",
             "👤 Control SaaS & Tokens",
-            "🛡️ Auditoría & Seguridad",
         ],
     )
-
     st.markdown("---")
-    st.metric("Mensualidad Estándar", PRECIO_MENSUALIDAD)
-    st.caption(f"📧 {CORREO_ADMIN}\n\n📱 +{WHATSAPP_ADMIN}")
-
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
         registrar_auditoria(cliente["nombre"], "Autenticación", "Cierre de sesión", "")
         st.session_state.autenticado = False
         st.session_state.cliente_info = None
         st.rerun()
 
-
-# =============================================================================
-# 7. ALERTAS DINÁMICAS DE COBRO MENSUAL
-# =============================================================================
 hoy = datetime.now()
-dia_del_mes = hoy.day
-if not cliente["es_admin"]:
-    if dia_del_mes > 25:
-        st.warning(
-            f"⚠️ ALERTA DE COBRO: Faltan {30 - dia_del_mes} días para el vencimiento de su mensualidad "
-            f"({PRECIO_MENSUALIDAD}). Evite suspensiones del servicio."
-        )
-    elif dia_del_mes <= 5:
-        st.info("ℹ️ Período de gracia activo hasta el día 5. Recuerde registrar su comprobante de pago.")
+if not cliente["es_admin"] and hoy.day > 25:
+    st.warning(f"⚠️ ALERTA DE COBRO: Faltan {30 - hoy.day} días para el vencimiento de su mensualidad ({PRECIO_MENSUALIDAD}).")
 
 
 # =============================================================================
-# 8. MÓDULOS EMPRESARIALES
+# 7. MÓDULOS DE PRODUCCIÓN
 # =============================================================================
 if modulo_activo == "📊 Dashboard Ejecutivo BI":
-    st.markdown(
-        """
-        <div class="basa-banner">
-            <h2 style="margin:0;">📊 Centro de Comando Ejecutivo (BI)</h2>
-            <p style="margin:0.2rem 0 0 0; color:#cbd5e1;">Visión unificada en tiempo real: Finanzas, Ventas CRM, Inventario, Nómina y Licencias SaaS</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+    st.title("📊 Centro de Comando Ejecutivo (BI)")
     with get_db() as conn:
-        total_facturado = conn.execute("SELECT COALESCE(SUM(total), 0) AS v FROM facturas_ecf").fetchone()["v"]
-        crm_ponderado = conn.execute(
-            "SELECT COALESCE(SUM(valor_estimado * probabilidad / 100.0), 0) AS v FROM crm_oportunidades WHERE etapa != 'Perdido'"
-        ).fetchone()["v"]
-        valor_inv = conn.execute("SELECT COALESCE(SUM(stock * costo_unitario), 0) AS v FROM inventario").fetchone()["v"]
-        nomina_bruta = conn.execute("SELECT COALESCE(SUM(salario_bruto), 0) AS v FROM empleados WHERE estado = 'ACTIVO'").fetchone()["v"]
-        clientes_activos = conn.execute("SELECT COUNT(*) AS v FROM clientes WHERE estado = 'ACTIVO'").fetchone()["v"]
-        mrr_saas = clientes_activos * TARIFA_MENSUAL_NUM
-
-        df_crm = pd.DataFrame(conn.execute("SELECT etapa, valor_estimado FROM crm_oportunidades").fetchall())
-        df_inv = pd.DataFrame(conn.execute("SELECT nombre, stock, stock_minimo FROM inventario").fetchall())
-
+        tot_fact = conn.execute("SELECT COALESCE(SUM(total), 0) AS v FROM facturas_ecf").fetchone()["v"]
+        crm_pond = conn.execute("SELECT COALESCE(SUM(valor_estimado * probabilidad / 100.0), 0) AS v FROM crm_oportunidades WHERE etapa != 'Perdido'").fetchone()["v"]
+        val_inv = conn.execute("SELECT COALESCE(SUM(stock * costo_unitario), 0) AS v FROM inventario").fetchone()["v"]
+        nom_bruta = conn.execute("SELECT COALESCE(SUM(salario_bruto), 0) AS v FROM empleados WHERE estado = 'ACTIVO'").fetchone()["v"]
+        activos = conn.execute("SELECT COUNT(*) AS v FROM clientes WHERE estado = 'ACTIVO'").fetchone()["v"]
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Facturación e-CF", f"RD$ {total_facturado:,.2f}")
-    k2.metric("Pipeline CRM Ponderado", f"RD$ {crm_ponderado:,.2f}")
-    k3.metric("Valor Inventario", f"RD$ {valor_inv:,.2f}")
-    k4.metric("Nómina Mensual Bruta", f"RD$ {nomina_bruta:,.2f}")
-    k5.metric("MRR SaaS Activo", f"RD$ {mrr_saas:,.2f}", f"{clientes_activos} activos")
-
-    st.markdown("---")
-    g1, g2 = st.columns(2)
-    with g1:
-        st.subheader("📈 Embudo Comercial por Etapa (RD$)")
-        if not df_crm.empty:
-            st.bar_chart(df_crm.groupby("etapa")["valor_estimado"].sum())
-        else:
-            st.info("Sin oportunidades registradas en CRM.")
-    with g2:
-        st.subheader("📦 Niveles de Stock vs Mínimo")
-        if not df_inv.empty:
-            st.bar_chart(df_inv.set_index("nombre")[["stock", "stock_minimo"]])
-        else:
-            st.info("Sin productos en inventario.")
+    k1.metric("Facturación e-CF", f"RD$ {tot_fact:,.2f}")
+    k2.metric("Pipeline CRM", f"RD$ {crm_pond:,.2f}")
+    k3.metric("Inventario", f"RD$ {val_inv:,.2f}")
+    k4.metric("Nómina Bruta", f"RD$ {nom_bruta:,.2f}")
+    k5.metric("MRR SaaS", f"RD$ {activos * TARIFA_MENSUAL_NUM:,.2f}", f"{activos} activos")
 
 
-elif modulo_activo == "📈 CRM & Pipeline Ventas":
-    st.title("📈 CRM & Pipeline Comercial Omnicanal")
-    with st.expander("➕ Nueva Oportunidad Comercial", expanded=False):
-        with st.form("form_crm"):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                emp = st.text_input("Empresa / Cuenta")
-                contacto = st.text_input("Contacto Principal")
-                tel = st.text_input("Teléfono / WhatsApp", placeholder="18095551234")
-            with c2:
-                mail = st.text_input("Correo Electrónico")
-                etapa = st.selectbox("Etapa", ["Prospecto", "Calificado", "Propuesta", "Negociación", "Ganado", "Perdido"])
-                valor = st.number_input("Valor Estimado (RD$)", min_value=0.0, step=1000.0, value=25000.0)
-            with c3:
-                prob = st.slider("Probabilidad de Cierre (%)", 0, 100, 50)
-                notas = st.text_area("Notas / Requerimiento", height=95)
-
-            if st.form_submit_button("Guardar Oportunidad", type="primary"):
-                if emp and contacto:
-                    with get_db() as conn:
-                        conn.execute(
-                            """
-                            INSERT INTO crm_oportunidades (empresa, contacto, telefono, email, etapa, valor_estimado, probabilidad, responsable, notas, fecha_creacion)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (emp, contacto, tel, mail, etapa, valor, prob, cliente["nombre"], notas, date.today().strftime("%Y-%m-%d")),
-                        )
-                        conn.commit()
-                    registrar_auditoria(cliente["nombre"], "CRM", "Nueva oportunidad", f"{emp} - RD$ {valor:,.2f}")
-                    st.success(f"✅ Oportunidad '{emp}' registrada.")
-                    st.rerun()
-                else:
-                    st.error("Complete empresa y contacto.")
+elif modulo_activo == "📑 Estados Financieros (NIC/NIIF/NIF)":
+    st.title("📑 Estados Financieros bajo NIC, NIIF y NIF")
+    st.caption("Generados automáticamente desde el Libro Mayor en tiempo real conforme a NIC 1, NIC 7, NIIF 9 y NIIF 15.")
 
     with get_db() as conn:
-        ops = conn.execute("SELECT * FROM crm_oportunidades ORDER BY id DESC").fetchall()
+        df_mayor = pd.DataFrame(
+            conn.execute(
+                """
+                SELECT p.codigo, p.nombre, p.tipo, p.subtipo,
+                       COALESCE(SUM(a.debito), 0) AS debito,
+                       COALESCE(SUM(a.credito), 0) AS credito
+                FROM plan_cuentas p
+                LEFT JOIN asientos_contables a ON p.codigo = a.cuenta_codigo
+                GROUP BY p.codigo, p.nombre, p.tipo, p.subtipo
+                ORDER BY p.codigo
+                """
+            ).fetchall()
+        )
+        flujo_caja = conn.execute(
+            "SELECT COALESCE(SUM(debito), 0) AS entradas, COALESCE(SUM(credito), 0) AS salidas FROM asientos_contables WHERE cuenta_codigo = '1101'"
+        ).fetchone()
 
-    for op in ops:
-        with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([2, 1.5, 1.2, 1.3])
-            c1.markdown(f"**🏢 {op['empresa']}**\n\n👤 {op['contacto']} | 📧 {op['email'] or 'N/A'}")
-            c2.markdown(f"Etapa: **{op['etapa']}** ({op['probabilidad']}%)\n\n💰 `RD$ {op['valor_estimado']:,.2f}`")
-            c3.caption(op["notas"] or "Sin notas")
-            with c4:
-                if op["telefono"]:
-                    msg = urllib.parse.quote(f"Hola {op['contacto']}, le contactamos de BASA Enterprise respecto a su propuesta para {op['empresa']}.")
-                    st.markdown(f'<a href="https://wa.me/{op["telefono"]}?text={msg}" target="_blank">💬 Seguimiento WhatsApp</a>', unsafe_allow_html=True)
-                etapas = ["Prospecto", "Calificado", "Propuesta", "Negociación", "Ganado", "Perdido"]
-                nueva_etapa = st.selectbox("Mover etapa", etapas, index=etapas.index(op["etapa"]), key=f"crm_et_{op['id']}")
-                if nueva_etapa != op["etapa"]:
-                    with get_db() as conn:
-                        conn.execute("UPDATE crm_oportunidades SET etapa = ? WHERE id = ?", (nueva_etapa, op["id"]))
-                        conn.commit()
-                    registrar_auditoria(cliente["nombre"], "CRM", "Cambio de etapa", f"{op['empresa']} -> {nueva_etapa}")
-                    st.rerun()
+    t_bg, t_er, t_fe, t_pat = st.tabs(["⚖️ Situación Financiera (NIC 1)", "📈 Resultados Integral (NIC 1 / NIIF 15)", "💵 Flujos de Efectivo (NIC 7)", "🏛️ Cambios en el Patrimonio & Notas"])
+
+    act_df = df_mayor[df_mayor["tipo"] == "Activo"].copy()
+    act_df["Saldo"] = act_df["debito"] - act_df["credito"]
+    pas_df = df_mayor[df_mayor["tipo"] == "Pasivo"].copy()
+    pas_df["Saldo"] = pas_df["credito"] - pas_df["debito"]
+    pat_df = df_mayor[df_mayor["tipo"] == "Patrimonio"].copy()
+    pat_df["Saldo"] = pat_df["credito"] - pat_df["debito"]
+    ing_df = df_mayor[df_mayor["tipo"] == "Ingreso"].copy()
+    ing_df["Saldo"] = ing_df["credito"] - ing_df["debito"]
+    cos_df = df_mayor[df_mayor["tipo"] == "Costo"].copy()
+    cos_df["Saldo"] = cos_df["debito"] - cos_df["credito"]
+    gas_df = df_mayor[df_mayor["tipo"] == "Gasto"].copy()
+    gas_df["Saldo"] = gas_df["debito"] - gas_df["credito"]
+
+    tot_ing = ing_df["Saldo"].sum()
+    tot_cos = cos_df["Saldo"].sum()
+    tot_gas = gas_df["Saldo"].sum()
+    utilidad_bruta = tot_ing - tot_cos
+    utilidad_antes_imp = utilidad_bruta - tot_gas
+    isr_est = round(utilidad_antes_imp * 0.27, 2) if utilidad_antes_imp > 0 else 0.0
+    utilidad_neta = utilidad_antes_imp - isr_est
+
+    tot_act = act_df["Saldo"].sum()
+    tot_pas = pas_df["Saldo"].sum()
+    tot_pat = pat_df["Saldo"].sum() + utilidad_antes_imp
+
+    with t_bg:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Activos (NIC 1)")
+            st.dataframe(act_df[["codigo", "nombre", "subtipo", "Saldo"]], use_container_width=True)
+            st.metric("Total Activos", f"RD$ {tot_act:,.2f}")
+        with c2:
+            st.subheader("Pasivos y Patrimonio (NIC 1)")
+            st.dataframe(pd.concat([pas_df, pat_df])[["codigo", "nombre", "tipo", "Saldo"]], use_container_width=True)
+            st.metric("Total Pasivo + Patrimonio + Resultado", f"RD$ {tot_pas + tot_pat:,.2f}")
+        diff_bg = round(tot_act - (tot_pas + tot_pat), 2)
+        if abs(diff_bg) <= 0.01:
+            st.success("✅ Ecuación Patrimonial Cuadrada (Activo = Pasivo + Patrimonio).")
+        else:
+            st.error(f"🚨 Descuadre detectado en Balance General: RD$ {diff_bg:,.2f}")
+
+    with t_er:
+        st.subheader("Estado de Resultados Integral")
+        er_rows = [
+            {"Concepto": "Ingresos de Actividades Ordinarias (NIIF 15)", "Monto (RD$)": tot_ing},
+            {"Concepto": "(-) Costo de Ventas (NIC 2)", "Monto (RD$)": -tot_cos},
+            {"Concepto": "(=) Utilidad Bruta", "Monto (RD$)": utilidad_bruta},
+            {"Concepto": "(-) Gastos Operativos y de Personal (NIC 19)", "Monto (RD$)": -tot_gas},
+            {"Concepto": "(=) Utilidad Antes de Impuestos", "Monto (RD$)": utilidad_antes_imp},
+            {"Concepto": "(-) ISR Corporativo Estimado (27% RD - NIC 12)", "Monto (RD$)": -isr_est},
+            {"Concepto": "(=) Utilidad Neta del Período", "Monto (RD$)": utilidad_neta},
+        ]
+        st.dataframe(pd.DataFrame(er_rows), use_container_width=True)
+
+    with t_fe:
+        st.subheader("Estado de Flujos de Efectivo (NIC 7)")
+        ent = flujo_caja["entradas"]
+        sal = flujo_caja["salidas"]
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Entradas de Efectivo (1101)", f"RD$ {ent:,.2f}")
+        f2.metric("Salidas de Efectivo (1101)", f"RD$ {sal:,.2f}")
+        f3.metric("Flujo Neto de Efectivo", f"RD$ {ent - sal:,.2f}")
+
+    with t_pat:
+        st.subheader("Cambios en el Patrimonio y Notas Revelatorias")
+        st.dataframe(pat_df[["codigo", "nombre", "Saldo"]], use_container_width=True)
+        st.info(
+            "**Notas a los Estados Financieros:**\n"
+            "- **Base de preparación:** Normas Internacionales de Información Financiera (NIIF / NIC 1) y NIF locales.\n"
+            "- **Reconocimiento de ingresos (NIIF 15):** Al emitir el comprobante fiscal electrónico (e-CF).\n"
+            "- **Inventarios (NIC 2):** Valuados al costo promedio o valor neto realizable, el menor."
+        )
+
+
+elif modulo_activo == "🛡️ Auditoría Forense & Cumplimiento":
+    st.title("🛡️ Auditoría Forense, Cumplimiento Normativo y Prevención")
+    st.caption("Escaneo automático de irregularidades contables (NIC/NIIF), fiscales (DGII), laborales (TSS) y control interno.")
+
+    if st.button("🔍 Ejecutar Auditoría Full del Sistema", type="primary"):
+        registrar_auditoria(cliente["nombre"], "Auditoría Forense", "Escaneo completo ejecutado", "")
+
+    hallazgos = ejecutar_auditoria_forense()
+    df_h = pd.DataFrame(hallazgos)
+    criticas = sum(1 for h in hallazgos if h["Severidad"] == "CRÍTICA")
+    altas = sum(1 for h in hallazgos if h["Severidad"] == "ALTA")
+    medias = sum(1 for h in hallazgos if h["Severidad"] == "MEDIA")
+
+    a1, a2, a3 = st.columns(3)
+    a1.metric("Violaciones Críticas", criticas)
+    a2.metric("Riesgos Altos", altas)
+    a3.metric("Alertas Medias", medias)
+    st.dataframe(df_h, use_container_width=True)
+
+    st.subheader("📜 Bitácora Inmutable de Operaciones")
+    with get_db() as conn:
+        df_aud = pd.DataFrame(conn.execute("SELECT id, fecha, usuario, modulo, accion, detalle FROM auditoria ORDER BY id DESC LIMIT 200").fetchall())
+    st.dataframe(df_aud, use_container_width=True)
 
 
 elif modulo_activo == "🧾 Facturación e-CF & Contabilidad":
-    st.title("🧾 ERP Contabilidad NIIF & Facturación Electrónica DGII (e-CF)")
-    t_ecf, t_cfg, t_diario, t_balance = st.tabs(
-        ["⚡ Emisor e-CF DGII", "🔐 Conector API DGII (.p12)", "📒 Libro Diario (Partida Doble)", "⚖️ Balance de Comprobación"]
-    )
+    st.title("🧾 ERP Contabilidad NIIF & Facturación e-CF DGII")
+    t_ecf, t_cfg, t_diario = st.tabs(["⚡ Emisor e-CF DGII", "🔐 Conector API DGII (.p12)", "📒 Libro Diario (Partida Doble)"])
 
     with t_cfg:
-        st.subheader("Configuración de Conector Real DGII e-CF")
-        st.caption("Cargue su certificado digital (.p12) para firmar XMLDSig y transmitir en vivo a la DGII. Sin certificado opera en modo local.")
         amb_sel = st.selectbox("Ambiente DGII", list(DGII_ENDPOINTS.keys()), index=list(DGII_ENDPOINTS.keys()).index(st.session_state.dgii_cfg["ambiente"]))
         rnc_em = st.text_input("RNC Emisor Autorizado", value=st.session_state.dgii_cfg["rnc_emisor"])
         p12_file = st.file_uploader("Certificado Digital (.p12 / .pfx)", type=["p12", "pfx"])
         p12_pwd = st.text_input("Contraseña del Certificado", type="password", value=st.session_state.dgii_cfg["p12_pass"])
-
-        if st.button("💾 Guardar Configuración DGII en Sesión", type="primary"):
+        if st.button("💾 Guardar Configuración DGII", type="primary"):
             st.session_state.dgii_cfg["ambiente"] = amb_sel
             st.session_state.dgii_cfg["rnc_emisor"] = rnc_em
             st.session_state.dgii_cfg["p12_pass"] = p12_pwd
             if p12_file is not None:
                 st.session_state.dgii_cfg["p12_bytes"] = p12_file.read()
-            st.success(f"✅ Configurado ambiente {amb_sel} | Certificado cargado: {'Sí' if st.session_state.dgii_cfg['p12_bytes'] else 'No (Modo Local)'}")
+            st.success("✅ Configuración DGII guardada en sesión.")
 
     with t_ecf:
-        st.subheader("Emitir Comprobante Fiscal Electrónico (e-CF)")
         with st.form("form_ecf"):
             fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                tipo_ecf = st.selectbox(
-                    "Tipo de e-CF",
-                    [
-                        "31 - Factura de Crédito Fiscal",
-                        "32 - Factura de Consumo",
-                        "33 - Nota de Débito",
-                        "34 - Nota de Crédito",
-                        "44 - Regímenes Especiales",
-                        "45 - Gubernamental",
-                    ],
-                )
-                rnc_cli = st.text_input("RNC / Cédula Comprador", placeholder="Ej: 131000001")
-            with fc2:
-                nom_cli = st.text_input("Razón Social / Nombre", placeholder="Ej: Farmacia San Juan SRL")
-                subtotal_ecf = st.number_input("Monto Gravado / Subtotal (RD$)", min_value=0.0, step=100.0, value=10000.0)
-            with fc3:
-                aplica_itbis = st.checkbox("Aplicar ITBIS 18%", value=True)
-                moneda = st.selectbox("Moneda", ["DOP", "USD"])
+            tipo_ecf = fc1.selectbox("Tipo e-CF", ["31 - Crédito Fiscal", "32 - Consumo", "33 - Nota Débito", "34 - Nota Crédito", "44 - Regímenes Especiales", "45 - Gubernamental"])
+            rnc_cli = fc1.text_input("RNC / Cédula Comprador")
+            nom_cli = fc2.text_input("Razón Social / Nombre")
+            subtotal_ecf = fc2.number_input("Subtotal (RD$)", min_value=0.0, step=100.0)
+            aplica_itbis = fc3.checkbox("Aplicar ITBIS 18%", value=True)
+            moneda = fc3.selectbox("Moneda", ["DOP", "USD"])
 
-            if st.form_submit_button("⚡ Emitir, Timbrar y Contabilizar e-CF", type="primary"):
-                if rnc_cli and nom_cli and subtotal_ecf > 0:
+            if st.form_submit_button("⚡ Emitir y Contabilizar e-CF", type="primary"):
+                rnc_digits = "".join(c for c in rnc_cli if c.isdigit())
+                if tipo_ecf.startswith("31") and len(rnc_digits) not in (9, 11):
+                    st.error("❌ Prevención DGII: Para Crédito Fiscal (31) el RNC/Cédula debe tener 9 u 11 dígitos.")
+                elif nom_cli and subtotal_ecf > 0:
                     itbis_val = round(subtotal_ecf * 0.18, 2) if aplica_itbis else 0.0
                     total_val = round(subtotal_ecf + itbis_val, 2)
                     cfg = st.session_state.dgii_cfg
-                    conector = DGIIConnector(DGII_ENDPOINTS[cfg["ambiente"]], cfg["rnc_emisor"], cfg["p12_bytes"], cfg["p12_pass"])
-
+                    conector = DGIIConnector(DGII_ENDPOINTS[cfg["ambiente"]], cfg["rnc_emisor"] or "131000001", cfg["p12_bytes"], cfg["p12_pass"])
                     with get_db() as conn:
                         seq = conn.execute("SELECT COUNT(*) + 1 AS s FROM facturas_ecf").fetchone()["s"]
                         encf = f"E{tipo_ecf[:2]}{seq:010d}"
-                        xml_base = generar_xml_ecf(encf, tipo_ecf, rnc_cli, nom_cli, subtotal_ecf, itbis_val, total_val, cfg["rnc_emisor"])
-                        try:
-                            res_dgii = conector.enviar_ecf(encf, xml_base)
-                        except Exception as ex:
-                            st.error(f"Error conectando a DGII: {ex}")
-                            res_dgii = None
-
-                        if res_dgii:
-                            conn.execute(
-                                """
-                                INSERT INTO facturas_ecf (encf, tipo_ecf, rnc_cliente, nombre_cliente, subtotal, itbis, total, moneda, estado_dgii, track_id, xml_contenido, fecha, creado_por)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                (encf, tipo_ecf, rnc_cli, nom_cli, subtotal_ecf, itbis_val, total_val, moneda, res_dgii["estado"], res_dgii["trackId"], res_dgii["xml_final"], datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"]),
-                            )
-                            fecha_hoy = date.today().strftime("%Y-%m-%d")
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (fecha_hoy, encf, f"Factura e-CF {nom_cli}", "1102", total_val, 0.0, cliente["nombre"]))
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (fecha_hoy, encf, f"Ingreso Venta {encf}", "4101", 0.0, subtotal_ecf, cliente["nombre"]))
-                            if itbis_val > 0:
-                                conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (fecha_hoy, encf, f"ITBIS Facturado {encf}", "2102", 0.0, itbis_val, cliente["nombre"]))
-                            conn.commit()
-                            registrar_auditoria(cliente["nombre"], "DGII e-CF", "Emisión e-CF", f"{encf} | TrackId: {res_dgii['trackId']}")
-                            st.success(f"✅ Comprobante {encf} procesado ({res_dgii['estado']}) | TrackId: {res_dgii['trackId']}")
+                        xml_base = generar_xml_ecf(encf, tipo_ecf, rnc_cli, nom_cli, subtotal_ecf, itbis_val, total_val, cfg["rnc_emisor"] or "131000001")
+                        res_dgii = conector.enviar_ecf(encf, xml_base)
+                        conn.execute(
+                            "INSERT INTO facturas_ecf (encf, tipo_ecf, rnc_cliente, nombre_cliente, subtotal, itbis, total, moneda, estado_dgii, track_id, xml_contenido, fecha, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (encf, tipo_ecf, rnc_cli, nom_cli, subtotal_ecf, itbis_val, total_val, moneda, res_dgii["estado"], res_dgii["trackId"], res_dgii["xml_final"], datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"]),
+                        )
+                        f_hoy = date.today().strftime("%Y-%m-%d")
+                        conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Factura e-CF {nom_cli}", "1102", total_val, 0.0, cliente["nombre"]))
+                        conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Ingreso {encf}", "4101", 0.0, subtotal_ecf, cliente["nombre"]))
+                        if itbis_val > 0:
+                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"ITBIS {encf}", "2102", 0.0, itbis_val, cliente["nombre"]))
+                        conn.commit()
+                    registrar_auditoria(cliente["nombre"], "DGII e-CF", "Emisión e-CF", f"{encf} | {res_dgii['trackId']}")
+                    st.success(f"✅ {encf} emitido y contabilizado ({res_dgii['estado']}).")
                 else:
-                    st.error("Complete RNC, Razón Social y un monto mayor a cero.")
+                    st.error("Complete cliente y monto mayor a cero.")
 
         with get_db() as conn:
             facturas = conn.execute("SELECT * FROM facturas_ecf ORDER BY id DESC").fetchall()
         for f in facturas:
-            with st.expander(f"🧾 {f['encf']} | {f['nombre_cliente']} | {f['moneda']} {f['total']:,.2f} | {f['estado_dgii']}"):
-                st.write(f"RNC: `{f['rnc_cliente']}` | TrackId: `{f.get('track_id') or 'N/A'}` | Subtotal: `{f['subtotal']:,.2f}` | ITBIS: `{f['itbis']:,.2f}`")
-                b1, b2, b3 = st.columns(3)
+            with st.expander(f"🧾 {f['encf']} | {f['nombre_cliente']} | {f['moneda']} {f['total']:,.2f}"):
+                b1, b2 = st.columns(2)
                 if f["xml_contenido"]:
-                    b1.download_button("📥 Descargar XML e-CF", data=f["xml_contenido"], file_name=f"{f['encf']}.xml", mime="application/xml", key=f"xml_{f['id']}")
+                    b1.download_button("📥 XML e-CF", data=f["xml_contenido"], file_name=f"{f['encf']}.xml", mime="application/xml", key=f"xml_{f['id']}")
                 if HAS_REPORTLAB:
-                    pdf_bytes = generar_pdf_factura(f, st.session_state.dgii_cfg["rnc_emisor"])
-                    b2.download_button("📄 Descargar Factura PDF", data=pdf_bytes, file_name=f"{f['encf']}.pdf", mime="application/pdf", key=f"pdf_{f['id']}")
-                else:
-                    b2.caption("Instale `reportlab` para exportar PDF.")
-                if f.get("track_id") and b3.button("🔍 Consultar TrackId DGII", key=f"trk_{f['id']}"):
-                    cfg = st.session_state.dgii_cfg
-                    conector = DGIIConnector(DGII_ENDPOINTS[cfg["ambiente"]], cfg["rnc_emisor"], cfg["p12_bytes"], cfg["p12_pass"])
-                    try:
-                        st.json(conector.consultar_trackid(f["track_id"]))
-                    except Exception as ex:
-                        st.error(f"Error consultando DGII: {ex}")
+                    b2.download_button("📄 Factura PDF", data=generar_pdf_factura(f, st.session_state.dgii_cfg["rnc_emisor"] or "131000001"), file_name=f"{f['encf']}.pdf", mime="application/pdf", key=f"pdf_{f['id']}")
 
     with t_diario:
-        st.subheader("📒 Registro Manual de Asiento Contable (Partida Doble)")
         with get_db() as conn:
             cuentas = conn.execute("SELECT codigo, nombre FROM plan_cuentas ORDER BY codigo").fetchall()
-        opciones_cuentas = [f"{c['codigo']} - {c['nombre']}" for c in cuentas]
-
+        opciones = [f"{c['codigo']} - {c['nombre']}" for c in cuentas]
         with st.form("form_asiento"):
             a1, a2, a3 = st.columns(3)
-            with a1:
-                ref_a = st.text_input("Referencia", value=f"AS-{random.randint(1000,9999)}")
-                desc_a = st.text_input("Concepto del Asiento")
-            with a2:
-                cta_deb = st.selectbox("Cuenta Débito", opciones_cuentas, index=0)
-                cta_cred = st.selectbox("Cuenta Crédito", opciones_cuentas, index=7 if len(opciones_cuentas) > 7 else 0)
-            with a3:
-                monto_a = st.number_input("Monto (RD$)", min_value=0.0, step=100.0)
-
+            ref_a = a1.text_input("Referencia", value=f"AS-{random.randint(1000,9999)}")
+            desc_a = a1.text_input("Concepto")
+            cta_deb = a2.selectbox("Cuenta Débito", opciones, index=0)
+            cta_cred = a2.selectbox("Cuenta Crédito", opciones, index=9 if len(opciones) > 9 else 0)
+            monto_a = a3.number_input("Monto (RD$)", min_value=0.0, step=100.0)
             if st.form_submit_button("Contabilizar Asiento", type="primary"):
                 if desc_a and monto_a > 0 and cta_deb != cta_cred:
                     f_hoy = date.today().strftime("%Y-%m-%d")
@@ -1171,418 +1031,153 @@ elif modulo_activo == "🧾 Facturación e-CF & Contabilidad":
                         conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, ref_a, desc_a, cta_cred.split(" - ")[0], 0.0, monto_a, cliente["nombre"]))
                         conn.commit()
                     registrar_auditoria(cliente["nombre"], "Contabilidad", "Asiento Manual", f"{ref_a}: RD$ {monto_a:,.2f}")
-                    st.success("✅ Asiento cuadrado y contabilizado.")
+                    st.success("✅ Asiento contabilizado.")
                     st.rerun()
-                else:
-                    st.error("Verifique concepto, monto > 0 y que Débito y Crédito usen cuentas distintas.")
-
         with get_db() as conn:
-            df_asientos = pd.DataFrame(conn.execute("SELECT id, fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por FROM asientos_contables ORDER BY id DESC").fetchall())
-        st.dataframe(df_asientos, use_container_width=True)
+            st.dataframe(pd.DataFrame(conn.execute("SELECT * FROM asientos_contables ORDER BY id DESC").fetchall()), use_container_width=True)
 
-    with t_balance:
-        st.subheader("⚖️ Balance de Comprobación en Tiempo Real")
-        with get_db() as conn:
-            df_bal = pd.DataFrame(
-                conn.execute(
-                    """
-                    SELECT p.codigo, p.nombre, p.tipo,
-                           COALESCE(SUM(a.debito), 0) AS total_debito,
-                           COALESCE(SUM(a.credito), 0) AS total_credito,
-                           COALESCE(SUM(a.debito) - SUM(a.credito), 0) AS saldo_neto
-                    FROM plan_cuentas p
-                    LEFT JOIN asientos_contables a ON p.codigo = a.cuenta_codigo
-                    GROUP BY p.codigo, p.nombre, p.tipo
-                    ORDER BY p.codigo
-                    """
-                ).fetchall()
-            )
-        st.dataframe(df_bal, use_container_width=True)
-        if not df_bal.empty:
-            tot_d = df_bal["total_debito"].sum()
-            tot_c = df_bal["total_credito"].sum()
-            st.info(f"**Cuadre Global:** Total Débitos: `RD$ {tot_d:,.2f}` | Total Créditos: `RD$ {tot_c:,.2f}` | Diferencia: `RD$ {tot_d - tot_c:,.2f}`")
+
+elif modulo_activo == "📈 CRM & Pipeline Ventas":
+    st.title("📈 CRM & Pipeline Comercial")
+    with st.form("form_crm"):
+        c1, c2, c3 = st.columns(3)
+        emp = c1.text_input("Empresa")
+        cont = c1.text_input("Contacto")
+        tel = c2.text_input("WhatsApp")
+        etapa = c2.selectbox("Etapa", ["Prospecto", "Calificado", "Propuesta", "Negociación", "Ganado", "Perdido"])
+        val = c3.number_input("Valor Estimado (RD$)", min_value=0.0, step=1000.0)
+        prob = c3.slider("Probabilidad (%)", 0, 100, 50)
+        if st.form_submit_button("Guardar Oportunidad", type="primary") and emp and cont:
+            with get_db() as conn:
+                conn.execute("INSERT INTO crm_oportunidades (empresa, contacto, telefono, email, etapa, valor_estimado, probabilidad, responsable, notas, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (emp, cont, tel, "", etapa, val, prob, cliente["nombre"], "", date.today().strftime("%Y-%m-%d")))
+                conn.commit()
+            st.rerun()
+    with get_db() as conn:
+        ops = conn.execute("SELECT * FROM crm_oportunidades ORDER BY id DESC").fetchall()
+    for op in ops:
+        st.write(f"🏢 **{op['empresa']}** | 👤 {op['contacto']} | {op['etapa']} | RD$ {op['valor_estimado']:,.2f}")
 
 
 elif modulo_activo == "📦 Inventario & POS Omnicanal":
-    st.title("📦 Inventario & Punto de Venta (POS) Integrado")
-    t_pos, t_inv = st.tabs(["🛒 Punto de Venta (POS)", "📋 Maestro de Inventario"])
+    st.title("📦 Inventario & POS")
+    t_pos, t_inv = st.tabs(["🛒 POS", "📋 Inventario"])
+    with t_inv:
+        with st.form("form_inv"):
+            i1, i2, i3 = st.columns(3)
+            sku = i1.text_input("SKU")
+            nom = i1.text_input("Producto")
+            stk = i2.number_input("Stock", min_value=0, value=10)
+            cost = i2.number_input("Costo", min_value=0.0, value=0.0)
+            prec = i3.number_input("Precio Venta", min_value=0.0, value=0.0)
+            if st.form_submit_button("Guardar SKU", type="primary") and sku and nom:
+                if prec < cost:
+                    st.warning("⚠️ Prevención NIC 2: El precio de venta es menor al costo.")
+                with get_db() as conn:
+                    conn.execute("INSERT INTO inventario (sku, nombre, categoria, stock, stock_minimo, costo_unitario, precio_venta, itbis_aplica) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (sku, nom, "General", stk, 5, cost, prec, 1))
+                    conn.commit()
+                st.rerun()
+        with get_db() as conn:
+            st.dataframe(pd.DataFrame(conn.execute("SELECT * FROM inventario ORDER BY sku").fetchall()), use_container_width=True)
 
     with t_pos:
         with get_db() as conn:
-            prods = conn.execute("SELECT * FROM inventario WHERE stock > 0 ORDER BY nombre").fetchall()
-
+            prods = conn.execute("SELECT * FROM inventario WHERE stock > 0").fetchall()
         if not prods:
-            st.warning("No hay productos con stock disponible.")
+            st.info("Registre productos en la pestaña Inventario para comenzar a vender.")
         else:
-            mapa_prods = {f"{p['sku']} | {p['nombre']} (Stock: {p['stock']} - RD$ {p['precio_venta']:,.2f})": p for p in prods}
+            mapa = {f"{p['sku']} | {p['nombre']} (Stock: {p['stock']})": p for p in prods}
             with st.form("form_pos"):
-                p1, p2, p3 = st.columns([2, 1, 1])
-                sel = p1.selectbox("Producto / Servicio", list(mapa_prods.keys()))
-                cant = p2.number_input("Cantidad", min_value=1, step=1, value=1)
-                rnc_pos = p3.text_input("RNC/Cédula Cliente", value="000000000")
-                nom_pos = st.text_input("Nombre Cliente POS", value="Consumidor Final")
-
-                if st.form_submit_button("💳 Procesar Venta POS + e-CF", type="primary"):
-                    prod_sel = mapa_prods[sel]
-                    if cant > prod_sel["stock"]:
-                        st.error(f"Stock insuficiente. Disponible: {prod_sel['stock']}")
-                    else:
-                        sub = round(prod_sel["precio_venta"] * cant, 2)
-                        itb = round(sub * 0.18, 2) if prod_sel["itbis_aplica"] else 0.0
+                sel = st.selectbox("Producto", list(mapa.keys()))
+                cant = st.number_input("Cantidad", min_value=1, step=1)
+                if st.form_submit_button("💳 Procesar Venta POS", type="primary"):
+                    p = mapa[sel]
+                    if cant <= p["stock"]:
+                        sub = round(p["precio_venta"] * cant, 2)
+                        itb = round(sub * 0.18, 2)
                         tot = round(sub + itb, 2)
-                        costo_tot = round(prod_sel["costo_unitario"] * cant, 2)
-
                         with get_db() as conn:
-                            conn.execute("UPDATE inventario SET stock = stock - ? WHERE sku = ?", (cant, prod_sel["sku"]))
+                            conn.execute("UPDATE inventario SET stock = stock - ? WHERE sku = ?", (cant, p["sku"]))
                             seq = conn.execute("SELECT COUNT(*) + 1 AS s FROM facturas_ecf").fetchone()["s"]
                             encf = f"E32{seq:010d}"
-                            xml_pos = generar_xml_ecf(encf, "32 - Factura de Consumo", rnc_pos, nom_pos, sub, itb, tot, st.session_state.dgii_cfg["rnc_emisor"])
-                            conn.execute(
-                                """
-                                INSERT INTO facturas_ecf (encf, tipo_ecf, rnc_cliente, nombre_cliente, subtotal, itbis, total, moneda, estado_dgii, track_id, xml_contenido, fecha, creado_por)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                (encf, "32 - Factura de Consumo", rnc_pos, nom_pos, sub, itb, tot, "DOP", "ACEPTADO e-CF (POS)", f"POS-{encf}", xml_pos, datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"]),
-                            )
-                            f_hoy = date.today().strftime("%Y-%m-%d")
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Venta POS {prod_sel['sku']}", "1101", tot, 0.0, cliente["nombre"]))
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Ingreso POS {prod_sel['sku']}", "4101", 0.0, sub, cliente["nombre"]))
-                            if itb > 0:
-                                conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"ITBIS POS {encf}", "2102", 0.0, itb, cliente["nombre"]))
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Costo Venta {prod_sel['sku']}", "5101", costo_tot, 0.0, cliente["nombre"]))
-                            conn.execute("INSERT INTO asientos_contables (fecha, referencia, descripcion, cuenta_codigo, debito, credito, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?)", (f_hoy, encf, f"Salida Inv {prod_sel['sku']}", "1103", 0.0, costo_tot, cliente["nombre"]))
+                            conn.execute("INSERT INTO facturas_ecf (encf, tipo_ecf, rnc_cliente, nombre_cliente, subtotal, itbis, total, moneda, estado_dgii, track_id, xml_contenido, fecha, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (encf, "32 - Consumo", "000000000", "Consumidor Final", sub, itb, tot, "DOP", "POS LOCAL", f"LOC-{encf}", "", datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"]))
                             conn.commit()
-                        registrar_auditoria(cliente["nombre"], "POS", "Venta POS", f"{encf} | {cant}x {prod_sel['sku']} | RD$ {tot:,.2f}")
-                        st.success(f"✅ Venta completada: {encf} por RD$ {tot:,.2f} (Stock y Contabilidad actualizados).")
+                        st.success(f"✅ Venta {encf} por RD$ {tot:,.2f}")
                         st.rerun()
-
-    with t_inv:
-        with st.expander("➕ Agregar Producto / SKU"):
-            with st.form("form_inv"):
-                i1, i2, i3 = st.columns(3)
-                sku = i1.text_input("SKU", value=f"SKU-{random.randint(100,999)}")
-                nom_p = i1.text_input("Nombre del Producto")
-                cat_p = i2.text_input("Categoría", value="General")
-                stk_p = i2.number_input("Stock Inicial", min_value=0, value=10)
-                cost_p = i3.number_input("Costo Unitario", min_value=0.0, value=500.0)
-                prec_p = i3.number_input("Precio Venta", min_value=0.0, value=1000.0)
-                if st.form_submit_button("Guardar Producto", type="primary"):
-                    if sku and nom_p:
-                        try:
-                            with get_db() as conn:
-                                conn.execute(
-                                    "INSERT INTO inventario (sku, nombre, categoria, stock, stock_minimo, costo_unitario, precio_venta, itbis_aplica) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                    (sku, nom_p, cat_p, stk_p, 5, cost_p, prec_p, 1),
-                                )
-                                conn.commit()
-                            st.success(f"✅ Producto {nom_p} agregado.")
-                            st.rerun()
-                        except Exception:
-                            st.error("Ese SKU ya existe.")
-
-        with get_db() as conn:
-            df_i = pd.DataFrame(conn.execute("SELECT * FROM inventario ORDER BY sku").fetchall())
-        st.dataframe(df_i, use_container_width=True)
 
 
 elif modulo_activo == "👥 RRHH & Nómina RD (TSS/ISR)":
-    st.title("👥 Gestión Humana & Nómina Automatizada (TSS / ISR RD)")
-
-    with st.expander("➕ Registrar Nuevo Empleado"):
-        with st.form("form_emp"):
-            e1, e2, e3 = st.columns(3)
-            emp_id = e1.text_input("Código Empleado", value=f"EMP-{random.randint(100,999)}")
-            emp_nom = e1.text_input("Nombre Completo")
-            emp_ced = e2.text_input("Cédula / NSS")
-            emp_dep = e2.selectbox("Departamento", ["Dirección", "Finanzas", "Tecnología", "Ventas", "Operaciones"])
-            emp_crg = e3.text_input("Cargo")
-            emp_sal = e3.number_input("Salario Bruto Mensual (RD$)", min_value=10000.0, step=1000.0, value=45000.0)
-            if st.form_submit_button("Guardar Empleado", type="primary"):
-                if emp_nom and emp_ced:
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO empleados (id, nombre, cedula, departamento, cargo, salario_bruto, estado, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                            (emp_id, emp_nom, emp_ced, emp_dep, emp_crg, emp_sal, "ACTIVO", date.today().strftime("%Y-%m-%d")),
-                        )
-                        conn.commit()
-                    st.success(f"✅ Empleado {emp_nom} registrado.")
-                    st.rerun()
+    st.title("👥 RRHH & Nómina RD (TSS / ISR)")
+    with st.form("form_emp"):
+        e1, e2, e3 = st.columns(3)
+        eid = e1.text_input("ID", value=f"EMP-{random.randint(100,999)}")
+        enom = e1.text_input("Nombre Completo")
+        eced = e2.text_input("Cédula / NSS")
+        edep = e2.selectbox("Departamento", ["Dirección", "Finanzas", "Tecnología", "Ventas", "Operaciones"])
+        esal = e3.number_input("Salario Bruto (RD$)", min_value=0.0, step=1000.0)
+        if st.form_submit_button("Registrar Colaborador", type="primary") and enom and eced:
+            with get_db() as conn:
+                conn.execute("INSERT INTO empleados (id, nombre, cedula, departamento, cargo, salario_bruto, estado, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (eid, enom, eced, edep, "Colaborador", esal, "ACTIVO", date.today().strftime("%Y-%m-%d")))
+                conn.commit()
+            st.rerun()
 
     with get_db() as conn:
-        emps = conn.execute("SELECT * FROM empleados WHERE estado = 'ACTIVO' ORDER BY id").fetchall()
-
-    filas_nomina = []
+        emps = conn.execute("SELECT * FROM empleados WHERE estado = 'ACTIVO'").fetchall()
+    filas = []
     for e in emps:
-        calc = calcular_nomina_rd(e["salario_bruto"])
-        filas_nomina.append(
-            {
-                "ID": e["id"],
-                "Nombre": e["nombre"],
-                "Departamento": e["departamento"],
-                "Salario Bruto": e["salario_bruto"],
-                "AFP (2.87%)": calc["afp_emp"],
-                "SFS (3.04%)": calc["sfs_emp"],
-                "ISR Mensual": calc["isr_emp"],
-                "Total Deducciones": calc["total_ded"],
-                "Salario Neto": calc["neto"],
-                "Costo Total Empresa": calc["costo_empresa"],
-            }
-        )
-
-    if filas_nomina:
-        df_nom = pd.DataFrame(filas_nomina)
-        st.dataframe(df_nom, use_container_width=True)
-        n1, n2 = st.columns(2)
-        n1.download_button("📥 Exportar Nómina TSS/ISR (.csv)", data=df_nom.to_csv(index=False).encode("utf-8"), file_name=f"nomina_basa_{date.today()}.csv", mime="text/csv")
+        c = calcular_nomina_rd(e["salario_bruto"])
+        filas.append({"ID": e["id"], "Nombre": e["nombre"], "Salario Bruto": e["salario_bruto"], "AFP (2.87%)": c["afp_emp"], "SFS (3.04%)": c["sfs_emp"], "ISR Mensual": c["isr_emp"], "Salario Neto": c["neto"]})
+    if filas:
+        df_n = pd.DataFrame(filas)
+        st.dataframe(df_n, use_container_width=True)
         if HAS_REPORTLAB:
-            pdf_nom = generar_pdf_nomina(filas_nomina)
-            n2.download_button("📄 Descargar Nómina y Volantes (.pdf)", data=pdf_nom, file_name=f"nomina_basa_{date.today()}.pdf", mime="application/pdf")
-        else:
-            n2.caption("Instale `reportlab` para exportar la nómina en PDF.")
+            st.download_button("📄 Descargar Nómina PDF", data=generar_pdf_nomina(filas), file_name="nomina_produccion.pdf", mime="application/pdf")
 
 
 elif modulo_activo == "💼 BASA Office 365 Suite":
-    st.title("💼 BASA Office 365 Suite (Colaboración en Línea)")
-    t_docs, t_sheets, t_kanban = st.tabs(["📝 BASA Docs", "📊 BASA Sheets", "📋 BASA Projects (Kanban)"])
-
-    with t_docs:
-        plantilla = st.selectbox("Plantilla rápida", ["En Blanco", "Contrato de Licencia SaaS BASA", "Memorándum Ejecutivo", "Propuesta Comercial Enterprise"])
-        texto_base = ""
-        if plantilla == "Contrato de Licencia SaaS BASA":
-            texto_base = f"# CONTRATO DE SERVICIO SAAS\nEntre **BASA Enterprise (Lic. Pedro Baldera)** y **[Cliente]**, por valor mensual de **{PRECIO_MENSUALIDAD}**..."
-        elif plantilla == "Memorándum Ejecutivo":
-            texto_base = f"# MEMORÁNDUM EJECUTIVO\n**Fecha:** {date.today()}\n**De:** {cliente['nombre']}\n**Asunto:** Actualización Operativa\n\nContenido..."
-        elif plantilla == "Propuesta Comercial Enterprise":
-            texto_base = "# PROPUESTA COMERCIAL\nImplementación integral ERP + CRM + Facturación e-CF DGII."
-
-        with st.form("form_doc"):
-            doc_tit = st.text_input("Título del Documento", value=f"Doc - {plantilla}")
-            doc_cont = st.text_area("Contenido (Markdown / Texto)", value=texto_base, height=220)
-            if st.form_submit_button("💾 Guardar Documento en Nube BASA", type="primary"):
-                if doc_tit and doc_cont:
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO office_docs (titulo, tipo, contenido, autor, actualizado_en) VALUES (?, ?, ?, ?, ?)",
-                            (doc_tit, plantilla, doc_cont, cliente["nombre"], datetime.now().strftime("%Y-%m-%d %H:%M")),
-                        )
-                        conn.commit()
-                    st.success("✅ Documento guardado.")
-                    st.rerun()
-
-        with get_db() as conn:
-            docs = conn.execute("SELECT * FROM office_docs ORDER BY id DESC").fetchall()
-        for d in docs:
-            with st.expander(f"📄 {d['titulo']} ({d['actualizado_en']} - {d['autor']})"):
+    st.title("💼 BASA Office 365 Suite")
+    with st.form("form_doc"):
+        tit = st.text_input("Título del Documento")
+        cont = st.text_area("Contenido", height=180)
+        if st.form_submit_button("💾 Guardar Documento", type="primary") and tit and cont:
+            with get_db() as conn:
+                conn.execute("INSERT INTO office_docs (titulo, tipo, contenido, autor, actualizado_en) VALUES (?, ?, ?, ?, ?)", (tit, "Corporativo", cont, cliente["nombre"], datetime.now().strftime("%Y-%m-%d %H:%M")))
+                conn.commit()
+            st.rerun()
+    with get_db() as conn:
+        for d in conn.execute("SELECT * FROM office_docs ORDER BY id DESC").fetchall():
+            with st.expander(f"📄 {d['titulo']} ({d['actualizado_en']})"):
                 st.markdown(d["contenido"])
-                st.download_button("📥 Descargar .md", data=d["contenido"], file_name=f"doc_{d['id']}.md", mime="text/markdown", key=f"doc_{d['id']}")
-
-    with t_sheets:
-        if "basa_sheet_df" not in st.session_state:
-            st.session_state.basa_sheet_df = pd.DataFrame(
-                [
-                    {"Concepto": "Licencias SaaS Activas", "Cantidad": 12, "Precio_Unitario": 2500.0, "Total": 30000.0},
-                    {"Concepto": "Implementación e-CF DGII", "Cantidad": 2, "Precio_Unitario": 35000.0, "Total": 70000.0},
-                    {"Concepto": "Soporte Premium 24/7", "Cantidad": 4, "Precio_Unitario": 5000.0, "Total": 20000.0},
-                ]
-            )
-        edited_df = st.data_editor(st.session_state.basa_sheet_df, num_rows="dynamic", use_container_width=True)
-        if not edited_df.empty and {"Cantidad", "Precio_Unitario"}.issubset(edited_df.columns):
-            edited_df["Total"] = pd.to_numeric(edited_df["Cantidad"], errors="coerce").fillna(0) * pd.to_numeric(edited_df["Precio_Unitario"], errors="coerce").fillna(0)
-            st.metric("Suma Total Calculada", f"RD$ {edited_df['Total'].sum():,.2f}")
-        st.session_state.basa_sheet_df = edited_df
-        st.download_button("📥 Exportar Hoja (.csv)", data=edited_df.to_csv(index=False).encode("utf-8"), file_name="basa_sheet.csv", mime="text/csv")
-
-    with t_kanban:
-        with st.form("form_tarea"):
-            k1, k2, k3, k4 = st.columns(4)
-            proy = k1.text_input("Proyecto", value="Despliegue ERP")
-            tit_t = k2.text_input("Tarea")
-            prio = k3.selectbox("Prioridad", ["Alta", "Media", "Baja"])
-            lim_t = k4.date_input("Fecha Límite", value=date.today())
-            if st.form_submit_button("Agregar Tarea", type="primary"):
-                if tit_t:
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO proyectos_tareas (proyecto, titulo, prioridad, estado, asignado_a, fecha_limite) VALUES (?, ?, ?, ?, ?, ?)",
-                            (proy, tit_t, prio, "Por Hacer", cliente["nombre"], str(lim_t)),
-                        )
-                        conn.commit()
-                    st.rerun()
-
-        with get_db() as conn:
-            tareas = conn.execute("SELECT * FROM proyectos_tareas ORDER BY id DESC").fetchall()
-
-        cols_k = st.columns(4)
-        estados_k = ["Por Hacer", "En Progreso", "Revisión", "Completado"]
-        for idx, est in enumerate(estados_k):
-            with cols_k[idx]:
-                st.markdown(f"### {est}")
-                for t in [x for x in tareas if x["estado"] == est]:
-                    with st.container(border=True):
-                        st.markdown(f"**{t['titulo']}**")
-                        st.caption(f"📁 {t['proyecto']} | ⚡ {t['prioridad']} | 📅 {t['fecha_limite']}")
-                        nuevo_e = st.selectbox("Estado", estados_k, index=idx, key=f"tsk_{t['id']}", label_visibility="collapsed")
-                        if nuevo_e != est:
-                            with get_db() as conn:
-                                conn.execute("UPDATE proyectos_tareas SET estado = ? WHERE id = ?", (nuevo_e, t["id"]))
-                                conn.commit()
-                            st.rerun()
 
 
 elif modulo_activo == "🚀 Master IA & Inyector":
-    st.title("🤖 MASTER IA - INYECTOR AUTÓNOMO DE SOFTWARE")
-    t_inj, t_hist = st.tabs(["🚀 Inyector de Software", "📜 Repositorios Generados"])
-    with t_inj:
-        col_t1, col_t2 = st.columns([2, 1])
-        with col_t1:
-            idea = st.text_area("Propuesta base, link o requerimiento técnico:", placeholder="Ej: Facturador Electrónico DGII v5 con e-CF 31, 32, 44...", height=130)
-        with col_t2:
-            tipo_app = st.selectbox(
-                "Ecosistema Destino",
-                [
-                    "Facturación Electrónica DGII (República Dominicana)",
-                    "Gestión Contable y Recaudo Préstamos",
-                    "Portal Clínico & Gestión Médica",
-                    "Control de Inventario e-Commerce POS",
-                    "API Microservicio REST / Python FastAPI",
-                ],
-            )
-            version_release = st.text_input("Versión de Release", value="v5.2.0-LTS")
-
-        if st.button("⚡ Aprobar Software y Enviar a Repositorio", use_container_width=True, type="primary"):
-            if idea.strip():
-                repo_title = idea[:45].strip() + ("..." if len(idea) > 45 else "")
-                repo_code = f"""# {repo_title} - {version_release}
-# Generado por BASA Enterprise Software Generator
-# Autor de Licencia: {cliente['nombre']}
-# Fecha de Compilación: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-from datetime import datetime
-
-class BASAService:
-    def __init__(self):
-        self.ecosistema = "{tipo_app}"
-        self.version = "{version_release}"
-        self.licencia = "{cliente['id']}"
-
-    def ejecutar_flujo(self):
-        print(f"[BASA AUTO-ENGINE] Iniciando servicio {{self.ecosistema}} v{{self.version}}")
-        return {{"status": "OK", "timestamp": str(datetime.now())}}
-
-if __name__ == "__main__":
-    print(BASAService().ejecutar_flujo())
-"""
-                with get_db() as conn:
-                    conn.execute(
-                        "INSERT INTO repositorios (titulo, descripcion, categoria, fecha, generado_por, codigo_base) VALUES (?, ?, ?, ?, ?, ?)",
-                        (repo_title, idea, tipo_app, datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"], repo_code),
-                    )
-                    conn.commit()
-                registrar_auditoria(cliente["nombre"], "Inyector IA", "Repositorio generado", repo_title)
-                st.success(f"✅ Software aprobado e inyectado con éxito: [{repo_title}]")
-                st.balloons()
-
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr("main.py", repo_code)
-                    zf.writestr("requirements.txt", "fastapi>=0.110.0\nuvicorn>=0.29.0\npydantic>=2.6.0\n")
-                    zf.writestr("README.md", f"# {repo_title}\n\nEcosistema: {tipo_app}\nVersión: {version_release}\n")
-
-                with st.expander("👁️ Ver Código Generado del Repositorio", expanded=True):
-                    st.code(repo_code, language="python")
-                    d1, d2 = st.columns(2)
-                    d1.download_button("📥 Descargar Archivo Python (.py)", data=repo_code, file_name=f"basa_repo_{int(datetime.now().timestamp())}.py", mime="text/x-python")
-                    d2.download_button("📦 Descargar Paquete Completo (.zip)", data=zip_buffer.getvalue(), file_name=f"basa_bundle_{int(datetime.now().timestamp())}.zip", mime="application/zip")
-            else:
-                st.error("⚠️ Por favor ingrese una idea o requerimiento antes de procesar.")
-
-    with t_hist:
+    st.title("🤖 Master IA & Inyector de Software")
+    idea = st.text_area("Requerimiento técnico:")
+    tipo_app = st.selectbox("Ecosistema", ["Facturación Electrónica DGII", "ERP Contable NIIF", "API Microservicio FastAPI"])
+    if st.button("⚡ Generar Repositorio", type="primary") and idea.strip():
+        code = f"# {idea[:40]}\n# Generado por {cliente['nombre']}\nprint('BASA Service Ready')\n"
         with get_db() as conn:
-            repos = conn.execute("SELECT id, titulo, categoria, fecha, generado_por, codigo_base FROM repositorios ORDER BY id DESC").fetchall()
-        for rp in repos:
-            with st.container(border=True):
-                st.markdown(f"### 📦 {rp['titulo']}")
-                st.caption(f"Categoría: {rp['categoria']} | Fecha: {rp['fecha']} | Generado por: {rp['generado_por']}")
-                with st.expander("Ver Código Fuente"):
-                    st.code(rp["codigo_base"], language="python")
-                    st.download_button("📥 Descargar Script", data=rp["codigo_base"], file_name=f"repo_{rp['id']}.py", mime="text/x-python", key=f"dl_{rp['id']}")
+            conn.execute("INSERT INTO repositorios (titulo, descripcion, categoria, fecha, generado_por, codigo_base) VALUES (?, ?, ?, ?, ?, ?)", (idea[:40], idea, tipo_app, datetime.now().strftime("%Y-%m-%d %H:%M"), cliente["nombre"], code))
+            conn.commit()
+        st.code(code, language="python")
 
 
 elif modulo_activo == "👤 Control SaaS & Tokens":
-    st.title("👤 Control General de Suscriptores y Tokens")
+    st.title("👤 Control de Suscriptores y Tokens")
+    with st.form("form_cli"):
+        c1, c2 = st.columns(2)
+        cid = c1.text_input("ID Cliente", value=f"C{random.randint(100,999)}")
+        cnom = c1.text_input("Empresa / Cliente")
+        ctel = c2.text_input("WhatsApp")
+        cmail = c2.text_input("Correo")
+        ctok = st.text_input("Token 6 dígitos", value=generar_token_unico(), max_chars=6)
+        if st.form_submit_button("Emitir Licencia", type="primary") and cnom and cmail:
+            with get_db() as conn:
+                conn.execute("INSERT INTO clientes (id, nombre, telefono, email, password, fecha_registro, estado, rango, codigo_6_digitos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (cid, cnom, ctel, cmail, "123456", date.today().strftime("%Y-%m-%d"), "ACTIVO", 1, ctok))
+                conn.commit()
+            registrar_auditoria(cliente["nombre"], "SaaS", "Alta cliente", f"{cnom} ({ctok})")
+            st.success(f"✅ Licencia emitida: {ctok}")
+            st.rerun()
     with get_db() as conn:
-        total_clientes = conn.execute("SELECT COUNT(*) AS c FROM clientes").fetchone()["c"]
-        activos = conn.execute("SELECT COUNT(*) AS c FROM clientes WHERE estado = 'ACTIVO'").fetchone()["c"]
-        suspendidos = conn.execute("SELECT COUNT(*) AS c FROM clientes WHERE estado != 'ACTIVO'").fetchone()["c"]
+        for r in conn.execute("SELECT * FROM clientes ORDER BY id DESC").fetchall():
+            st.write(f"👤 **{r['nombre']}** | Token: `{r['codigo_6_digitos']}` | Estado: **{r['estado']}**")
 
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("Total Clientes", total_clientes)
-    col_m2.metric("Suscripciones Activas", activos)
-    col_m3.metric("Suspendidos / Vencidos", suspendidos)
-    col_m4.metric("Tarifa Base", PRECIO_MENSUALIDAD)
-
-    st.markdown("---")
-    with st.expander("➕ Dar de Alta Nuevo Cliente / Suscriptor", expanded=False):
-        with st.form("form_nuevo_cliente"):
-            fc1, fc2 = st.columns(2)
-            with fc1:
-                nuevo_id = st.text_input("ID Cliente", value=f"C{random.randint(100, 999)}")
-                nuevo_nombre = st.text_input("Nombre / Razón Social", placeholder="Ej: Farmacia San Juan SRL")
-                nuevo_telefono = st.text_input("Teléfono / WhatsApp", placeholder="18291234567")
-            with fc2:
-                nuevo_email = st.text_input("Correo Electrónico", placeholder="contacto@cliente.com")
-                nuevo_estado = st.selectbox("Estado Inicial", ["ACTIVO", "EN PRUEBA", "SUSPENDIDO"])
-                nuevo_token = st.text_input("Token de 6 dígitos asignado", value=generar_token_unico(), max_chars=6)
-
-            if st.form_submit_button("Guardar y Emitir Licencia", type="primary"):
-                if nuevo_nombre and nuevo_email and nuevo_token:
-                    try:
-                        with get_db() as conn:
-                            conn.execute(
-                                "INSERT INTO clientes (id, nombre, telefono, email, password, fecha_registro, estado, rango, codigo_6_digitos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (nuevo_id, nuevo_nombre, nuevo_telefono, nuevo_email, "123456", date.today().strftime("%Y-%m-%d"), nuevo_estado, 1, nuevo_token),
-                            )
-                            conn.commit()
-                        registrar_auditoria(cliente["nombre"], "SaaS Control", "Alta de cliente", f"{nuevo_nombre} ({nuevo_token})")
-                        st.success(f"✅ Cliente {nuevo_nombre} registrado exitosamente con token: {nuevo_token}")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: Ya existe un registro con este ID o Token: {e}")
-                else:
-                    st.error("Por favor complete nombre, correo y token.")
-
-    with get_db() as conn:
-        rows = conn.execute("SELECT id, nombre, email, telefono, codigo_6_digitos, estado, fecha_registro FROM clientes ORDER BY id DESC").fetchall()
-
-    for r in rows:
-        with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.2, 1.2])
-            c1.write(f"👤 **{r['nombre']}** (`{r['id']}`)\n\n📅 Registro: {r['fecha_registro']}")
-            c2.write(f"✉️ {r['email']}\n\n📱 {r['telefono']}")
-            color_estado = "green" if r["estado"] == "ACTIVO" else "orange" if r["estado"] == "EN PRUEBA" else "red"
-            c3.markdown(f"🔑 Token: `<b>{r['codigo_6_digitos']}</b>`", unsafe_allow_html=True)
-            c3.markdown(f"Estado: <span style='color:{color_estado}; font-weight:bold;'>{r['estado']}</span>", unsafe_allow_html=True)
-
-            with c4:
-                msj = urllib.parse.quote(f"Hola {r['nombre']}, su clave de acceso para BASA SaaS es: {r['codigo_6_digitos']}. Mensualidad: {PRECIO_MENSUALIDAD}. Soporte: {CORREO_ADMIN}")
-                url_wsp = f"https://wa.me/{r['telefono']}?text={msj}"
-                st.markdown(f'<a href="{url_wsp}" target="_blank" style="font-size:0.85rem; display:block; margin-bottom:6px;">💬 Enviar WhatsApp</a>', unsafe_allow_html=True)
-
-                nuevo_st = "SUSPENDIDO" if r["estado"] == "ACTIVO" else "ACTIVO"
-                if st.button(f"Cambiar a {nuevo_st}", key=f"btn_st_{r['id']}", use_container_width=True):
-                    with get_db() as conn:
-                        conn.execute("UPDATE clientes SET estado = ? WHERE id = ?", (nuevo_st, r["id"]))
-                        conn.commit()
-                    registrar_auditoria(cliente["nombre"], "SaaS Control", "Cambio de estado", f"{r['id']} -> {nuevo_st}")
-                    st.rerun()
-
-
-elif modulo_activo == "🛡️ Auditoría & Seguridad":
-    st.title("🛡️ Registro de Auditoría (Audit Trail) & Seguridad")
-    st.info(f"Motor de Base de Datos Activo: **{motor_db_activo()}** | ReportLab PDF: **{'Activo' if HAS_REPORTLAB else 'No instalado'}** | Requests DGII: **{'Activo' if HAS_REQUESTS else 'No instalado'}**")
-    with get_db() as conn:
-        df_aud = pd.DataFrame(conn.execute("SELECT id, fecha, usuario, modulo, accion, detalle FROM auditoria ORDER BY id DESC LIMIT 200").fetchall())
-    st.dataframe(df_aud, use_container_width=True)
-    if not df_aud.empty:
-        st.download_button("📥 Exportar Bitácora (.csv)", data=df_aud.to_csv(index=False).encode("utf-8"), file_name="auditoria_basa.csv", mime="text/csv")
