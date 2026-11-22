@@ -1,0 +1,2 @@
+BASA Enterprise SaaS en basa_enterprise_suite.py y la tienes abierta en Canvas.
+Para ejecutarla en tu servidor o equipo local, instala las dependencias (pip install streamlit pandas) y corre streamlit run basa_enterprise_suite.py; luego puedes validar el acceso maestro con 862600 o el perfil piloto con 102030.
