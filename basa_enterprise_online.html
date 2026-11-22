@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BASA Enterprise SaaS Suite | Lic. Pedro Baldera</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .toast-enter { animation: slideIn 0.25s ease-out; }
+    @keyframes slideIn {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-box" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm"></div>
+
+  <!-- LOGIN PORTAL -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
+    <div class="w-full max-w-4xl bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-gradient-to-r from-blue-900 to-indigo-900 p-6 text-center border-b border-slate-800">
+        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-600/80 text-white mb-2">ECOSISTEMA EMPRESARIAL FULL ONLINE</span>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">🏦 BASA ENTERPRISE SAAS SUITE</h1>
+        <p class="text-slate-300 text-sm mt-1">ERP NIIF • Facturación e-CF DGII • CRM • Nómina TSS/ISR • Office 365 • Control SaaS</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 sm:p-8">
+        <div>
+          <h2 class="text-lg font-bold mb-1">🔑 Validación de Licencia</h2>
+          <p class="text-slate-400 text-xs mb-4">Ingrese su token único de 6 dígitos enviado por WhatsApp o Correo:</p>
+          <label for="token-input" class="block text-xs font-semibold text-slate-300 mb-1">Código de 6 dígitos</label>
+          <input id="token-input" type="password" maxlength="6" placeholder="Ej: 862600"
+            class="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+          <div class="grid grid-cols-2 gap-3">
+            <button id="btn-login" type="button"
+              class="w-full py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-sm transition">
+              🚀 Activar Sistema
+            </button>
+            <button id="btn-master-login" type="button"
+              class="w-full py-3 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 font-semibold text-sm transition">
+              🔑 Clave Maestra
+            </button>
+          </div>
+          <div class="mt-4 text-xs text-slate-400 space-y-1">
+            <p>• Clave Maestra Admin: <code class="text-blue-400 font-mono">862600</code></p>
+            <p>• Token Cliente Beta: <code class="text-emerald-400 font-mono">102030</code></p>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/50 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+          <div>
+            <h2 class="text-lg font-bold mb-2">💳 Activación de Membresía</h2>
+            <p class="text-sm text-slate-300 mb-3">Costo Mensual: <span class="font-bold text-emerald-400">RD$ 2,500.00</span></p>
+            <div class="text-xs text-slate-300 space-y-1.5 bg-slate-900/70 p-3 rounded-lg border border-slate-800">
+              <p>👤 <strong>Lic. Pedro Baldera</strong></p>
+              <p>📧 licpedrobaldera@gmail.com</p>
+              <p>📱 +1 (829) 771-7390</p>
+            </div>
+          </div>
+          <a href="https://wa.me/18297717390?text=Hola%20Lic.%20Pedro%20Baldera%2C%20deseo%20activar%20mi%20token%20para%20BASA%20Enterprise%20SaaS."
+             target="_blank" rel="noopener noreferrer"
+             class="mt-4 block w-full text-center py-3 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition">
+            💬 Contactar por WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP SHELL -->
+  <div id="app-view" class="hidden min-h-screen flex flex-col md:flex-row">
+    <!-- MOBILE HEADER -->
+    <header class="md:hidden flex items-center justify-between bg-slate-900 border-b border-slate-800 px-4 py-3 sticky top-0 z-30">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🏦</span>
+        <span class="font-bold text-sm">BASA Enterprise</span>
+      </div>
+      <button id="btn-mobile-menu" type="button" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold">
+        ☰ Menú
+      </button>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="hidden md:flex md:w-64 md:flex-col bg-slate-900 border-r border-slate-800 p-4 justify-between shrink-0">
+      <div>
+        <div class="hidden md:block mb-4 pb-4 border-b border-slate-800">
+          <h2 class="text-lg font-extrabold">🏦 BASA Enterprise</h2>
+          <p id="user-name-label" class="text-xs text-blue-400 font-semibold mt-1"></p>
+          <p id="user-role-label" class="text-xs text-slate-400"></p>
+        </div>
+        <nav id="nav-list" class="space-y-1 text-sm"></nav>
+      </div>
+      <div class="pt-4 mt-6 border-t border-slate-800 space-y-2">
+        <div class="bg-slate-800/60 p-3 rounded-lg text-xs">
+          <p class="text-slate-400">Mensualidad Estándar</p>
+          <p class="font-bold text-emerald-400 text-sm">RD$ 2,500.00</p>
+        </div>
+        <button id="btn-logout" type="button"
+          class="w-full py-2.5 px-3 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition">
+          🚪 Cerrar Sesión
+        </button>
+      </div>
+    </aside>
+
+    <!-- CONTENT AREA -->
+    <main class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-full">
+      <div id="billing-alert" class="hidden mb-4 p-3 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs font-medium"></div>
+      <div id="module-container" class="max-w-6xl mx-auto"></div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = 'basa_enterprise_state_v1';
+      const CLAVE_MAESTRA = '862600';
+      const TARIFA = 2500;
+
+      const MODULES = [
+        { id: 'bi', label: '📊 Dashboard BI' },
+        { id: 'crm', label: '📈 CRM & Ventas' },
+        { id: 'ecf', label: '🧾 e-CF & Contabilidad' },
+        { id: 'pos', label: '📦 Inventario & POS' },
+        { id: 'nomina', label: '👥 Nómina RD (TSS/ISR)' },
+        { id: 'office', label: '💼 BASA Office 365' },
+        { id: 'saas', label: '👤 Control SaaS & Tokens' },
+        { id: 'deploy', label: '☁️ GitHub → Streamlit' }
+      ];
+
+      const DEFAULT_STATE = {
+        clientes: [
+          { id: 'C001', nombre: 'Usuario Beta - Empresa Piloto', telefono: '18297717390', email: 'cliente@basa.com', estado: 'ACTIVO', token: '102030', fecha: '2026-11-01' },
+          { id: 'C002', nombre: 'Farmacia San Juan SRL', telefono: '18095550199', email: 'admin@farmaciasanjuan.do', estado: 'ACTIVO', token: '482910', fecha: '2026-11-12' }
+        ],
+        crm: [
+          { id: 1, empresa: 'Grupo Comercial Caribe SRL', contacto: 'Roberto Pérez', telefono: '18095550101', etapa: 'Propuesta', valor: 185000, prob: 70 },
+          { id: 2, empresa: 'Clínica Integral del Este', contacto: 'Dra. Laura Mejía', telefono: '18295550202', etapa: 'Negociación', valor: 95000, prob: 85 }
+        ],
+        inventario: [
+          { sku: 'BASA-ERP-01', nombre: 'Licencia Mensual BASA Enterprise', stock: 999, costo: 500, precio: 2500 },
+          { sku: 'HW-POS-100', nombre: 'Terminal POS Térmica Android', stock: 18, costo: 8500, precio: 14500 },
+          { sku: 'SRV-DGII-01', nombre: 'Implementación e-CF DGII', stock: 50, costo: 12000, precio: 35000 }
+        ],
+        facturas: [
+          { encf: 'E310000000001', tipo: '31 - Crédito Fiscal', rnc: '131000001', cliente: 'Grupo Comercial Caribe SRL', subtotal: 25000, itbis: 4500, total: 29500, fecha: '2026-11-20' }
+        ],
+        asientos: [
+          { fecha: '2026-11-20', ref: 'E310000000001', desc: 'Factura e-CF Grupo Caribe', cuenta: '1102 - Cuentas por Cobrar', debito: 29500, credito: 0 },
+          { fecha: '2026-11-20', ref: 'E310000000001', desc: 'Ingreso Ventas', cuenta: '4101 - Ingresos por Ventas', debito: 0, credito: 25000 },
+          { fecha: '2026-11-20', ref: 'E310000000001', desc: 'ITBIS Facturado', cuenta: '2102 - ITBIS por Pagar', debito: 0, credito: 4500 }
+        ],
+        empleados: [
+          { id: 'EMP-001', nombre: 'Lic. Pedro Baldera', cedula: '001-0000001-1', depto: 'Dirección', bruto: 150000 },
+          { id: 'EMP-002', nombre: 'Ana Martínez', cedula: '001-0000002-2', depto: 'Finanzas', bruto: 65000 },
+          { id: 'EMP-003', nombre: 'Carlos Gómez', cedula: '001-0000003-3', depto: 'Tecnología', bruto: 85000 }
+        ],
+        docs: [
+          { id: 1, titulo: 'Contrato Estándar SaaS BASA', contenido: '# CONTRATO BASA ENTERPRISE\nMensualidad estándar: RD$ 2,500.00. Soporte: licpedrobaldera@gmail.com', fecha: '2026-11-21' }
+        ],
+        tareas: [
+          { id: 1, proyecto: 'Despliegue Cloud', titulo: 'Publicar en Streamlit Cloud', prioridad: 'Alta', estado: 'Por Hacer' },
+          { id: 2, proyecto: 'DGII e-CF', titulo: 'Cargar certificado .p12', prioridad: 'Alta', estado: 'En Progreso' }
+        ]
+      };
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        return JSON.parse(JSON.stringify(DEFAULT_STATE));
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {}
+      }
+
+      let state = loadState();
+      let currentUser = null;
+      let activeModule = 'bi';
+      let chartInstance = null;
+
+      function toast(msg, type = 'info') {
+        const box = document.getElementById('toast-box');
+        const colors = type === 'error' ? 'bg-rose-600' : type === 'success' ? 'bg-emerald-600' : 'bg-blue-600';
+        const el = document.createElement('div');
+        el.className = `toast-enter ${colors} text-white text-xs font-semibold px-4 py-3 rounded-lg shadow-lg`;
+        el.textContent = msg;
+        box.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+      }
+
+      function fmt(n) {
+        return 'RD$ ' + Number(n || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function calcularNominaRD(bruto) {
+        const afp = +(bruto * 0.0287).toFixed(2);
+        const sfs = +(bruto * 0.0304).toFixed(2);
+        const anual = (bruto - afp - sfs) * 12;
+        let isrAnual = 0;
+        if (anual > 867123) isrAnual = 79776 + (anual - 867123.01) * 0.25;
+        else if (anual > 624329) isrAnual = 31216 + (anual - 624329.01) * 0.20;
+        else if (anual > 416220) isrAnual = (anual - 416220.01) * 0.15;
+        const isr = +(isrAnual / 12).toFixed(2);
+        const neto = +(bruto - afp - sfs - isr).toFixed(2);
+        return { afp, sfs, isr, neto };
+      }
+
+      function downloadFile(filename, content, mime) {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function verifyToken(code) {
+        const c = (code || '').trim();
+        if (c === CLAVE_MAESTRA) {
+          return { id: 'ADMIN', nombre: 'Lic. Pedro Baldera', esAdmin: true, estado: 'ACTIVO' };
+        }
+        const found = state.clientes.find(x => x.token === c);
+        if (!found) return null;
+        return { id: found.id, nombre: found.nombre, esAdmin: false, estado: found.estado };
+      }
+
+      function enterApp(user) {
+        currentUser = user;
+        document.getElementById('login-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
+        document.getElementById('user-name-label').textContent = user.nombre;
+        document.getElementById('user-role-label').textContent = user.esAdmin ? '👑 Administrador Maestro' : '👤 Suscriptor';
+        const dia = new Date().getDate();
+        const alertBox = document.getElementById('billing-alert');
+        if (!user.esAdmin && dia > 25) {
+          alertBox.textContent = `⚠️ ALERTA DE COBRO: Faltan ${30 - dia} días para el vencimiento de su mensualidad (RD$ 2,500.00).`;
+          alertBox.classList.remove('hidden');
+        } else {
+          alertBox.classList.add('hidden');
+        }
+        renderNav();
+        renderModule();
+      }
+
+      document.getElementById('btn-login').addEventListener('click', () => {
+        const val = document.getElementById('token-input').value;
+        const u = verifyToken(val);
+        if (!u) return toast('Código inválido. Use 862600 o 102030.', 'error');
+        if (u.estado !== 'ACTIVO') return toast(`Cuenta en estado ${u.estado}. Contacte soporte.`, 'error');
+        enterApp(u);
+      });
+
+      document.getElementById('btn-master-login').addEventListener('click', () => {
+        enterApp(verifyToken(CLAVE_MAESTRA));
+      });
+
+      document.getElementById('btn-logout').addEventListener('click', () => {
+        currentUser = null;
+        document.getElementById('app-view').classList.add('hidden');
+        document.getElementById('login-view').classList.remove('hidden');
+        document.getElementById('token-input').value = '';
+      });
+
+      document.getElementById('btn-mobile-menu').addEventListener('click', () => {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('hidden');
+        sb.classList.toggle('flex');
+        sb.classList.toggle('flex-col');
+      });
+
+      function renderNav() {
+        const nav = document.getElementById('nav-list');
+        nav.innerHTML = '';
+        MODULES.forEach(m => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          const active = m.id === activeModule;
+          btn.className = `w-full text-left px-3 py-2.5 rounded-lg font-medium transition ${
+            active ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+          }`;
+          btn.textContent = m.label;
+          btn.addEventListener('click', () => {
+            activeModule = m.id;
+            if (window.innerWidth < 768) {
+              document.getElementById('sidebar').classList.add('hidden');
+            }
+            renderNav();
+            renderModule();
+          });
+          nav.appendChild(btn);
+        });
+      }
+
+      function renderModule() {
+        const container = document.getElementById('module-container');
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+        if (activeModule === 'bi') {
+          const totFact = state.facturas.reduce((a, b) => a + b.total, 0);
+          const crmPond = state.crm.filter(x => x.etapa !== 'Perdido').reduce((a, b) => a + (b.valor * b.prob / 100), 0);
+          const valInv = state.inventario.reduce((a, b) => a + (b.stock * b.costo), 0);
+          const nomBruta = state.empleados.reduce((a, b) => a + b.bruto, 0);
+          const activos = state.clientes.filter(c => c.estado === 'ACTIVO').length;
+
+          container.innerHTML = `
+            <div class="bg-gradient-to-r from-slate-900 to-blue-950 border border-slate-800 rounded-xl p-5 mb-6">
+              <h1 class="text-xl sm:text-2xl font-extrabold">📊 Centro de Comando Ejecutivo (BI)</h1>
+              <p class="text-slate-300 text-xs sm:text-sm mt-1">Visión unificada en tiempo real para celular y computadora</p>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl"><p class="text-xs text-slate-400">Facturación e-CF</p><p class="text-lg font-bold text-blue-400 mt-1">${fmt(totFact)}</p></div>
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl"><p class="text-xs text-slate-400">CRM Ponderado</p><p class="text-lg font-bold text-indigo-400 mt-1">${fmt(crmPond)}</p></div>
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl"><p class="text-xs text-slate-400">Valor Inventario</p><p class="text-lg font-bold text-amber-400 mt-1">${fmt(valInv)}</p></div>
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl"><p class="text-xs text-slate-400">Nómina Bruta</p><p class="text-lg font-bold text-rose-400 mt-1">${fmt(nomBruta)}</p></div>
+              <div class="col-span-2 lg:col-span-1 bg-slate-900 border border-slate-800 p-4 rounded-xl"><p class="text-xs text-slate-400">MRR SaaS (${activos} activos)</p><p class="text-lg font-bold text-emerald-400 mt-1">${fmt(activos * TARIFA)}</p></div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+              <h2 class="text-sm font-bold mb-3">📈 Pipeline Comercial por Etapa (RD$)</h2>
+              <div class="relative h-64"><canvas id="bi-chart"></canvas></div>
+            </div>`;
+
+          const ctx = document.getElementById('bi-chart').getContext('2d');
+          const stages = ['Prospecto', 'Calificado', 'Propuesta', 'Negociación', 'Ganado'];
+          const vals = stages.map(s => state.crm.filter(x => x.etapa === s).reduce((a, b) => a + b.valor, 0));
+          chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: stages, datasets: [{ label: 'Valor (RD$)', data: vals, backgroundColor: '#3b82f6', borderRadius: 6 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }, x: { ticks: { color: '#cbd5e1' }, grid: { display: false } } } }
+          });
+        }
+
+        else if (activeModule === 'crm') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">📈 CRM & Pipeline de Ventas</h1>
+            <form id="form-crm" class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <input id="crm-emp" required placeholder="Empresa" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="crm-cont" required placeholder="Contacto" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="crm-tel" placeholder="WhatsApp (1809...)" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="crm-val" type="number" min="0" value="25000" placeholder="Valor RD$" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <button type="submit" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-sm">+ Agregar Lead</button>
+            </form>
+            <div class="space-y-3" id="crm-list"></div>`;
+
+          document.getElementById('form-crm').addEventListener('submit', e => {
+            e.preventDefault();
+            state.crm.unshift({
+              id: Date.now(),
+              empresa: document.getElementById('crm-emp').value.trim(),
+              contacto: document.getElementById('crm-cont').value.trim(),
+              telefono: document.getElementById('crm-tel').value.trim(),
+              etapa: 'Prospecto',
+              valor: Number(document.getElementById('crm-val').value) || 0,
+              prob: 30
+            });
+            saveState(); toast('Oportunidad guardada.', 'success'); renderModule();
+          });
+
+          const list = document.getElementById('crm-list');
+          state.crm.forEach(op => {
+            const card = document.createElement('div');
+            card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+            card.innerHTML = `
+              <div>
+                <p class="font-bold text-sm">🏢 ${op.empresa}</p>
+                <p class="text-xs text-slate-400">👤 ${op.contacto} • <span class="text-emerald-400 font-semibold">${fmt(op.valor)}</span></p>
+              </div>
+              <div class="flex items-center gap-2">
+                ${op.telefono ? `<a target="_blank" rel="noopener noreferrer" href="https://wa.me/${op.telefono}?text=${encodeURIComponent('Hola ' + op.contacto + ', seguimiento BASA Enterprise para ' + op.empresa)}" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">💬 WhatsApp</a>` : ''}
+                <select data-id="${op.id}" class="crm-stage px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+                  ${['Prospecto', 'Calificado', 'Propuesta', 'Negociación', 'Ganado', 'Perdido'].map(s => `<option value="${s}" ${op.etapa === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>`;
+            list.appendChild(card);
+          });
+          list.querySelectorAll('.crm-stage').forEach(sel => {
+            sel.addEventListener('change', e => {
+              const item = state.crm.find(x => x.id === Number(e.target.dataset.id));
+              if (item) { item.etapa = e.target.value; saveState(); toast('Etapa actualizada.', 'success'); }
+            });
+          });
+        }
+
+        else if (activeModule === 'ecf') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">🧾 Facturación e-CF DGII & Contabilidad NIIF</h1>
+            <form id="form-ecf" class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <select id="ecf-tipo" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm">
+                <option value="31 - Crédito Fiscal">31 - Crédito Fiscal</option>
+                <option value="32 - Consumo">32 - Consumo</option>
+                <option value="44 - Regímenes Especiales">44 - Regímenes Especiales</option>
+              </select>
+              <input id="ecf-rnc" required placeholder="RNC / Cédula" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="ecf-cli" required placeholder="Razón Social" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="ecf-sub" type="number" min="1" value="10000" placeholder="Subtotal RD$" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <button type="submit" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-sm">⚡ Emitir e-CF</button>
+            </form>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <h2 class="font-bold text-sm mb-3">Comprobantes Emitidos</h2>
+                <div id="ecf-list" class="space-y-2"></div>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-x-auto">
+                <h2 class="font-bold text-sm mb-3">📒 Libro Diario (Partida Doble Automática)</h2>
+                <table class="w-full text-xs text-left">
+                  <thead class="text-slate-400 border-b border-slate-800"><tr><th class="py-2">Ref</th><th>Cuenta</th><th class="text-right">Débito</th><th class="text-right">Crédito</th></tr></thead>
+                  <tbody class="divide-y divide-slate-800">
+                    ${state.asientos.slice(0, 12).map(a => `<tr><td class="py-2 font-mono">${a.ref}</td><td>${a.cuenta}</td><td class="text-right">${fmt(a.debito)}</td><td class="text-right">${fmt(a.credito)}</td></tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>`;
+
+          document.getElementById('form-ecf').addEventListener('submit', e => {
+            e.preventDefault();
+            const tipo = document.getElementById('ecf-tipo').value;
+            const rnc = document.getElementById('ecf-rnc').value.trim();
+            const cli = document.getElementById('ecf-cli').value.trim();
+            const sub = Number(document.getElementById('ecf-sub').value) || 0;
+            const itbis = +(sub * 0.18).toFixed(2);
+            const tot = +(sub + itbis).toFixed(2);
+            const encf = `E${tipo.slice(0, 2)}${String(state.facturas.length + 1).padStart(10, '0')}`;
+            const hoy = new Date().toISOString().slice(0, 10);
+            state.facturas.unshift({ encf, tipo, rnc, cliente: cli, subtotal: sub, itbis, total: tot, fecha: hoy });
+            state.asientos.unshift(
+              { fecha: hoy, ref: encf, desc: `Factura ${cli}`, cuenta: '1102 - Cuentas por Cobrar', debito: tot, credito: 0 },
+              { fecha: hoy, ref: encf, desc: `Ingreso ${encf}`, cuenta: '4101 - Ingresos por Ventas', debito: 0, credito: sub },
+              { fecha: hoy, ref: encf, desc: `ITBIS ${encf}`, cuenta: '2102 - ITBIS por Pagar', debito: 0, credito: itbis }
+            );
+            saveState(); toast(`Comprobante ${encf} emitido y contabilizado.`, 'success'); renderModule();
+          });
+
+          const elist = document.getElementById('ecf-list');
+          state.facturas.forEach(f => {
+            const row = document.createElement('div');
+            row.className = 'p-3 rounded-lg bg-slate-800/60 border border-slate-800 flex items-center justify-between gap-2';
+            row.innerHTML = `
+              <div>
+                <p class="font-bold text-xs font-mono text-blue-400">${f.encf}</p>
+                <p class="text-xs text-slate-300">${f.cliente} • ${fmt(f.total)}</p>
+              </div>
+              <button type="button" class="dl-xml px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs font-semibold">📥 XML</button>`;
+            row.querySelector('.dl-xml').addEventListener('click', () => {
+              const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<ECF><Encabezado><eNCF>${f.encf}</eNCF><RNCComprador>${f.rnc}</RNCComprador><MontoTotal>${f.total.toFixed(2)}</MontoTotal></Encabezado></ECF>`;
+              downloadFile(`${f.encf}.xml`, xml, 'application/xml');
+            });
+            elist.appendChild(row);
+          });
+        }
+
+        else if (activeModule === 'pos') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">📦 Inventario & Punto de Venta (POS)</h1>
+            <form id="form-pos" class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <select id="pos-sku" class="sm:col-span-2 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm">
+                ${state.inventario.map(p => `<option value="${p.sku}">${p.sku} | ${p.nombre} (Stock: ${p.stock} - ${fmt(p.precio)})</option>`).join('')}
+              </select>
+              <input id="pos-cant" type="number" min="1" value="1" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <button type="submit" class="py-2 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm">💳 Cobrar POS</button>
+            </form>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead class="text-slate-400 border-b border-slate-800"><tr><th class="py-2">SKU</th><th>Producto</th><th class="text-right">Stock</th><th class="text-right">Precio</th></tr></thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${state.inventario.map(p => `<tr><td class="py-2 font-mono">${p.sku}</td><td>${p.nombre}</td><td class="text-right font-bold">${p.stock}</td><td class="text-right">${fmt(p.precio)}</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>`;
+
+          document.getElementById('form-pos').addEventListener('submit', e => {
+            e.preventDefault();
+            const sku = document.getElementById('pos-sku').value;
+            const cant = Number(document.getElementById('pos-cant').value) || 1;
+            const prod = state.inventario.find(x => x.sku === sku);
+            if (!prod || cant > prod.stock) return toast('Stock insuficiente.', 'error');
+            prod.stock -= cant;
+            const sub = +(prod.precio * cant).toFixed(2);
+            const itbis = +(sub * 0.18).toFixed(2);
+            const tot = +(sub + itbis).toFixed(2);
+            const encf = `E32${String(state.facturas.length + 1).padStart(10, '0')}`;
+            state.facturas.unshift({ encf, tipo: '32 - Consumo', rnc: '000000000', cliente: 'Consumidor Final POS', subtotal: sub, itbis, total: tot, fecha: new Date().toISOString().slice(0, 10) });
+            saveState(); toast(`Venta POS ${encf} por ${fmt(tot)} completada.`, 'success'); renderModule();
+          });
+        }
+
+        else if (activeModule === 'nomina') {
+          const filas = state.empleados.map(e => ({ ...e, ...calcularNominaRD(e.bruto) }));
+          container.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h1 class="text-xl font-extrabold">👥 RRHH & Nómina RD (TSS / ISR)</h1>
+              <button id="btn-dl-nomina" type="button" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold">📥 Exportar Nómina CSV</button>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead class="text-slate-400 border-b border-slate-800">
+                  <tr><th class="py-2">Nombre</th><th>Depto</th><th class="text-right">Bruto</th><th class="text-right">AFP 2.87%</th><th class="text-right">SFS 3.04%</th><th class="text-right">ISR</th><th class="text-right">Neto</th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${filas.map(f => `<tr><td class="py-2 font-semibold">${f.nombre}</td><td>${f.depto}</td><td class="text-right">${fmt(f.bruto)}</td><td class="text-right">${fmt(f.afp)}</td><td class="text-right">${fmt(f.sfs)}</td><td class="text-right">${fmt(f.isr)}</td><td class="text-right text-emerald-400 font-bold">${fmt(f.neto)}</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>`;
+          document.getElementById('btn-dl-nomina').addEventListener('click', () => {
+            const csv = ['ID,Nombre,Depto,Bruto,AFP,SFS,ISR,Neto', ...filas.map(f => `${f.id},"${f.nombre}",${f.depto},${f.bruto},${f.afp},${f.sfs},${f.isr},${f.neto}`)].join('\n');
+            downloadFile('nomina_basa_rd.csv', csv, 'text/csv');
+          });
+        }
+
+        else if (activeModule === 'office') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">💼 BASA Office 365 Suite</h1>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <h2 class="font-bold text-sm mb-3">📝 BASA Docs Rápido</h2>
+                <input id="doc-tit" placeholder="Título del documento" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm mb-2" />
+                <textarea id="doc-body" rows="5" placeholder="Escriba su contrato, memo o propuesta..." class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm mb-3"></textarea>
+                <div class="flex gap-2">
+                  <button id="btn-save-doc" type="button" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold">💾 Guardar</button>
+                  <button id="btn-dl-doc" type="button" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold">📥 Descargar .md</button>
+                </div>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <h2 class="font-bold text-sm mb-3">📋 Tablero de Tareas</h2>
+                <div class="space-y-2">
+                  ${state.tareas.map(t => `
+                    <div class="p-3 rounded-lg bg-slate-800/60 border border-slate-800 flex items-center justify-between gap-2">
+                      <div><p class="font-semibold text-xs">${t.titulo}</p><p class="text-[11px] text-slate-400">${t.proyecto} • ${t.prioridad}</p></div>
+                      <select data-id="${t.id}" class="tsk-sel px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs">
+                        ${['Por Hacer', 'En Progreso', 'Completado'].map(s => `<option value="${s}" ${t.estado === s ? 'selected' : ''}>${s}</option>`).join('')}
+                      </select>
+                    </div>`).join('')}
+                </div>
+              </div>
+            </div>`;
+          document.getElementById('btn-save-doc').addEventListener('click', () => {
+            const t = document.getElementById('doc-tit').value.trim();
+            const c = document.getElementById('doc-body').value.trim();
+            if (!t || !c) return toast('Complete título y contenido.', 'error');
+            state.docs.unshift({ id: Date.now(), titulo: t, contenido: c, fecha: new Date().toISOString().slice(0, 10) });
+            saveState(); toast('Documento guardado.', 'success');
+          });
+          document.getElementById('btn-dl-doc').addEventListener('click', () => {
+            const t = document.getElementById('doc-tit').value.trim() || 'documento_basa';
+            const c = document.getElementById('doc-body').value;
+            downloadFile(`${t}.md`, c, 'text/markdown');
+          });
+          container.querySelectorAll('.tsk-sel').forEach(sel => {
+            sel.addEventListener('change', e => {
+              const t = state.tareas.find(x => x.id === Number(e.target.dataset.id));
+              if (t) { t.estado = e.target.value; saveState(); toast('Tarea actualizada.', 'success'); }
+            });
+          });
+        }
+
+        else if (activeModule === 'saas') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">👤 Control SaaS & Tokens (RD$ 2,500.00/mes)</h1>
+            <form id="form-saas" class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <input id="cli-nom" required placeholder="Nombre / Empresa" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="cli-tel" required placeholder="WhatsApp (1829...)" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <input id="cli-mail" required placeholder="Correo electrónico" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm" />
+              <button type="submit" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-sm">+ Emitir Token</button>
+            </form>
+            <div class="space-y-3" id="cli-list"></div>`;
+
+          document.getElementById('form-saas').addEventListener('submit', e => {
+            e.preventDefault();
+            const tok = String(Math.floor(100000 + Math.random() * 900000));
+            const nuevo = {
+              id: 'C' + String(state.clientes.length + 1).padStart(3, '0'),
+              nombre: document.getElementById('cli-nom').value.trim(),
+              telefono: document.getElementById('cli-tel').value.trim(),
+              email: document.getElementById('cli-mail').value.trim(),
+              estado: 'ACTIVO',
+              token: tok,
+              fecha: new Date().toISOString().slice(0, 10)
+            };
+            state.clientes.unshift(nuevo); saveState(); toast(`Token emitido: ${tok}`, 'success'); renderModule();
+          });
+
+          const clist = document.getElementById('cli-list');
+          state.clientes.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+            const wspMsg = encodeURIComponent(`Hola ${c.nombre}, su clave de acceso para BASA SaaS es: ${c.token}. Mensualidad: RD$ 2,500.00.`);
+            card.innerHTML = `
+              <div>
+                <p class="font-bold text-sm">👤 ${c.nombre} <span class="text-xs text-slate-400">(${c.id})</span></p>
+                <p class="text-xs text-slate-400">🔑 Token: <code class="text-blue-400 font-mono font-bold">${c.token}</code> • Estado: <span class="${c.estado === 'ACTIVO' ? 'text-emerald-400' : 'text-rose-400'} font-bold">${c.estado}</span></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <a target="_blank" rel="noopener noreferrer" href="https://wa.me/${c.telefono}?text=${wspMsg}" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">💬 WhatsApp</a>
+                <button type="button" data-id="${c.id}" class="tog-cli px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold">${c.estado === 'ACTIVO' ? 'Suspender' : 'Activar'}</button>
+              </div>`;
+            clist.appendChild(card);
+          });
+          clist.querySelectorAll('.tog-cli').forEach(b => {
+            b.addEventListener('click', e => {
+              const cli = state.clientes.find(x => x.id === e.target.dataset.id);
+              if (cli) { cli.estado = cli.estado === 'ACTIVO' ? 'SUSPENDIDO' : 'ACTIVO'; saveState(); renderModule(); }
+            });
+          });
+        }
+
+        else if (activeModule === 'deploy') {
+          container.innerHTML = `
+            <h1 class="text-xl font-extrabold mb-4">☁️ Publicación Rápida: GitHub → Streamlit Cloud</h1>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 text-sm">
+              <p class="text-slate-300">Esta versión HTML ya corre al 100% en cualquier celular o computadora. Si deseas publicar además la versión Python/PostgreSQL en <strong>Streamlit Community Cloud</strong>:</p>
+              <ol class="list-decimal list-inside space-y-2 text-slate-300">
+                <li>Crea un repositorio en <strong>GitHub</strong> y sube <code>basa_enterprise_suite.py</code>, <code>requirements.txt</code> y <code>run_online.sh</code>.</li>
+                <li>Entra a <strong>share.streamlit.io</strong> → <em>New app</em> → elige tu repo y selecciona <code>basa_enterprise_suite.py</code>.</li>
+                <li>Opcional: en <em>Advanced settings → Secrets</em> agrega <code>DATABASE_URL="postgresql://..."</code> y haz clic en <strong>Deploy</strong>.</li>
+              </ol>
+            </div>`;
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
