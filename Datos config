@@ -1,2 +1,18 @@
 BASA Enterprise SaaS en basa_enterprise_suite.py y la tienes abierta en Canvas.
 Para ejecutarla en tu servidor o equipo local, instala las dependencias (pip install streamlit pandas) y corre streamlit run basa_enterprise_suite.py; luego puedes validar el acceso maestro con 862600 o el perfil piloto con 102030.
+BASA Enterprise SaaS Suite (basa_enterprise_suite.py) unifica en una sola plataforma web (Python + Streamlit + SQLite) el control de licencias SaaS con módulos de gestión empresarial, contabilidad fiscal dominicana y colaboración tipo Office.
+Funciones principales y uso actual
+ * Control SaaS y Licencias: Valida accesos por token de 6 dígitos (862600 para administrador maestro y 102030 para cliente piloto), gestiona altas y suspensiones de suscriptores, calcula alertas de cobro mensual (RD$ 2,500.00) y genera enlaces directos de WhatsApp con el token del cliente.
+ * Dashboard Ejecutivo (BI): Muestra métricas en vivo de facturación e-CF, pipeline CRM ponderado, valor de inventario, nómina bruta y MRR SaaS, junto con gráficos por etapa comercial y niveles de stock.
+ * CRM y Pipeline de Ventas: Administra prospectos por etapa (Prospecto a Ganado/Perdido), calcula el valor ponderado y abre seguimiento directo por WhatsApp.
+ * ERP Contabilidad NIIF y Facturación e-CF (DGII): Emite comprobantes electrónicos (31, 32, 33, 34, 44, 45) con cálculo de ITBIS (18%), descarga de XML e-CF, asientos automáticos de partida doble y balance de comprobación en tiempo real.
+ * Inventario y Punto de Venta (POS): Controla existencias por SKU y ejecuta ventas POS que descuentan stock, timbran e-CF e insertan los asientos de ingreso y costo de venta en una sola operación.
+ * RRHH y Nómina RD (TSS / ISR): Calcula automáticamente AFP (2.87%), SFS (3.04%), ISR según escala anual DGII, salario neto y costo patronal, con exportación a CSV.
+ * BASA Office 365 Suite: Incluye editor de documentos corporativos con plantillas descargables en .md, hoja de cálculo interactiva con exportación CSV y tablero Kanban de proyectos.
+ * Master IA (Inyector de Software) y Auditoría: Compila plantillas de microservicios descargables en .py o paquete .zip (main.py, requirements.txt, README.md) y registra una bitácora inmutable de acciones críticas.
+Estado real: ¿sencillo o full?
+Es un sistema Enterprise Full operativo en arquitectura ligera local (un solo archivo desplegable sin costos de infraestructura ni licencias de terceros). Sus cálculos contables, de nómina RD, inventario, CRM y control SaaS funcionan de extremo a extremo sobre SQLite (basa_saas_enterprise.db); lo único simulado actualmente es el envío a servidores externos de la DGII (genera el XML e-CF localmente listo para conectar a tu certificado digital .p12 y al API de certificación DGII) y el almacenamiento en nube multi-servidor (si atiendes decenas de empresas concurrentes en línea, conviene migrar get_db() de SQLite a PostgreSQL).
+Importancia, utilidad y cómo sacarle provecho
+ * Modelo de ingresos recurrentes (MRR): Vende acceso a pymes locales por RD$ 2,500.00/mes usando el panel de tokens para activar o suspender clientes morosos con un clic y cobrar vía WhatsApp.
+ * Ahorro operativo inmediato: Centraliza en una sola herramienta lo que normalmente exige pagar por separado licencias de CRM, ERP contable, facturador e-CF y suite ofimática.
+ * Despliegue comercial rápido: Usa los módulos de POS, Nómina RD y e-CF como demostración en vivo frente a farmacias, clínicas o comercios, y apóyate en el Inyector de Software para entregarles adaptaciones a medida en horas.
