@@ -1586,5 +1586,3 @@ elif modulo_activo == "🛡️ Auditoría & Seguridad":
     st.dataframe(df_aud, use_container_width=True)
     if not df_aud.empty:
         st.download_button("📥 Exportar Bitácora (.csv)", data=df_aud.to_csv(index=False).encode("utf-8"), file_name="auditoria_basa.csv", mime="text/csv")
-
-
