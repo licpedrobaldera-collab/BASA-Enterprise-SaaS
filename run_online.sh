@@ -34,5 +34,3 @@ python3 -m pip install streamlit pandas reportlab requests psycopg2-binary crypt
 
 echo "[3/3] Iniciando BASA Enterprise SaaS Suite en http://0.0.0.0:${PORT} ..."
 exec streamlit run "$APP_FILE" --server.port="$PORT" --server.address="0.0.0.0"
-
-
