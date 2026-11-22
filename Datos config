@@ -1,3 +1,7 @@
+Tienes el sistema completo en basa_enterprise_suite.py junto con el lanzador automático run_online.sh abiertos en Canvas, listos para ejecutarse en línea.
+Sube basa_enterprise_suite.py, requirements.txt y run_online.sh a tu servidor (o a Streamlit Community Cloud) y ejecuta bash run_online.sh para levantar la aplicación en el puerto 8501 con acceso maestro 862600 o piloto 102030.
+
+
 BASA Enterprise SaaS en basa_enterprise_suite.py y la tienes abierta en Canvas.
 Para ejecutarla en tu servidor o equipo local, instala las dependencias (pip install streamlit pandas) y corre streamlit run basa_enterprise_suite.py; luego puedes validar el acceso maestro con 862600 o el perfil piloto con 102030.
 BASA Enterprise SaaS Suite (basa_enterprise_suite.py) unifica en una sola plataforma web (Python + Streamlit + SQLite) el control de licencias SaaS con módulos de gestión empresarial, contabilidad fiscal dominicana y colaboración tipo Office.
